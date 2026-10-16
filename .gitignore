@@ -48,3 +48,6 @@ next-env.d.ts
 
 # loop-guard の状態
 /.loop/
+
+# 開発用の https 証明書（next dev --experimental-https が作る）
+certificates
