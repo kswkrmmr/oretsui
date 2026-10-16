@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+// ループの見張り役。状態は .loop/state.json に保存し、コンテキストが流れても数え直さない。
+//
+// 使い方:
+//   node scripts/loop-guard/cli.mjs start <issue番号>   作業開始（同じ issue なら続きから）
+//   node scripts/loop-guard/cli.mjs verify              npm run verify を実行して記録
+//   node scripts/loop-guard/cli.mjs review pass|fail    レビュー役の判定を記録
+//   node scripts/loop-guard/cli.mjs ci pass|fail        CI の結果を記録
+//   node scripts/loop-guard/cli.mjs check               終了条件だけ確認
+//   node scripts/loop-guard/cli.mjs stop "<理由>"        自分の判断で停止（仕様不明など）
+//   node scripts/loop-guard/cli.mjs status              現在の状態を表示
+//   node scripts/loop-guard/cli.mjs finish              PR 作成後に状態を片付ける
+//
+// 終了コード: 0 = 続行してよい / 1 = 検証失敗（直して再実行） / 3 = 停止（STOP）
+
+import { execSync, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import {
+  applyCi,
+  applyReview,
+  applyVerify,
+  evaluate,
+  initialState,
+  stop,
+} from "./core.mjs";
+
+const DIR = ".loop";
+const STATE = `${DIR}/state.json`;
+const VERIFY_LOG = `${DIR}/last-verify.log`;
+const VERIFY_TIMEOUT_MS = 15 * 60 * 1000;
+const EXIT = { ok: 0, fail: 1, usage: 2, stop: 3 };
+
+const load = () =>
+  existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : null;
+
+const save = (state) => {
+  mkdirSync(DIR, { recursive: true });
+  writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n");
+};
+
+/** main との差分行数（未追跡ファイルを含む。package-lock.json は除く） */
+function diffLines() {
+  const sh = (c) => execSync(c, { encoding: "utf8" });
+  const base = process.env.LOOP_GUARD_BASE ?? "main"; // 動作確認用に比較元を変えられる
+  const tracked = sh(`git diff --numstat ${base}`)
+    .split("\n")
+    .filter((l) => l && !l.endsWith("package-lock.json"))
+    .reduce((sum, l) => {
+      const [add, del] = l.split("\t");
+      return sum + (Number(add) || 0) + (Number(del) || 0);
+    }, 0);
+  const untracked = sh("git ls-files --others --exclude-standard")
+    .split("\n")
+    .filter(Boolean)
+    .reduce((sum, f) => sum + readFileSync(f, "utf8").split("\n").length, 0);
+  return tracked + untracked;
+}
+
+function requireState() {
+  const state = load();
+  if (!state) {
+    console.error(
+      "状態がありません。先に `start <issue番号>` を実行してください",
+    );
+    process.exit(EXIT.usage);
+  }
+  return state;
+}
+
+/** 状態を保存し、終了条件に当たっていれば STOP を出して終了する */
+function judge(state, { failed = false } = {}) {
+  const reason = evaluate(state, { now: Date.now(), diffLines: diffLines() });
+  if (reason) {
+    save(stop(state, reason));
+    console.log(`STOP: ${reason}`);
+    console.log(
+      "→ 作業を下書きPRとして push し、issue に経緯をコメントして needs-human を付け、ループを止めてください",
+    );
+    process.exit(EXIT.stop);
+  }
+  save(state);
+  if (failed) {
+    console.log(
+      `FAIL: 検証失敗 ${state.verifyFailures}回目（ログ: ${VERIFY_LOG}）。直して再実行してください`,
+    );
+    process.exit(EXIT.fail);
+  }
+  console.log("CONTINUE");
+  process.exit(EXIT.ok);
+}
+
+const [cmd, arg] = process.argv.slice(2);
+
+switch (cmd) {
+  case "start": {
+    const issue = Number(arg);
+    if (!issue) {
+      console.error("issue 番号を指定してください");
+      process.exit(EXIT.usage);
+    }
+    const current = load();
+    if (current && current.issue === issue) {
+      console.log(`issue #${issue} の続きから再開します`);
+      judge(current);
+    }
+    if (current && !current.stopped) {
+      console.error(
+        `issue #${current.issue} が作業中です。finish か stop をしてから始めてください`,
+      );
+      process.exit(EXIT.usage);
+    }
+    save(initialState(issue, Date.now()));
+    console.log(`issue #${issue} の作業を開始しました`);
+    process.exit(EXIT.ok);
+  }
+  case "verify": {
+    const state = requireState();
+    if (state.stopped) judge(state);
+    const result = spawnSync("npm", ["run", "verify"], {
+      encoding: "utf8",
+      timeout: VERIFY_TIMEOUT_MS,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    const timedOut = result.error?.code === "ETIMEDOUT";
+    const output =
+      (result.stdout ?? "") +
+      (result.stderr ?? "") +
+      (timedOut ? "\nError: verify timed out" : "");
+    mkdirSync(DIR, { recursive: true });
+    writeFileSync(VERIFY_LOG, output);
+    const passed = result.status === 0 && !timedOut;
+    // 失敗時は末尾だけ表示（全文はログファイル）
+    if (!passed) console.log(output.split("\n").slice(-60).join("\n"));
+    judge(applyVerify(state, { passed, output }), { failed: !passed });
+    break;
+  }
+  case "review":
+  case "ci": {
+    if (arg !== "pass" && arg !== "fail") {
+      console.error(`${cmd} pass|fail を指定してください`);
+      process.exit(EXIT.usage);
+    }
+    const state = requireState();
+    const apply = cmd === "review" ? applyReview : applyCi;
+    judge(apply(state, arg === "pass"));
+    break;
+  }
+  case "check":
+    judge(requireState());
+    break;
+  case "stop": {
+    const reason = arg || "理由の記載なし";
+    save(stop(requireState(), `手動停止: ${reason}`));
+    console.log(`STOP: 手動停止: ${reason}`);
+    process.exit(EXIT.stop);
+  }
+  case "status":
+    console.log(JSON.stringify(load(), null, 2));
+    break;
+  case "finish":
+    rmSync(DIR, { recursive: true, force: true });
+    console.log("状態を片付けました");
+    break;
+  default:
+    console.error(
+      "使い方: loop-guard <start|verify|review|ci|check|stop|status|finish>",
+    );
+    process.exit(EXIT.usage);
+}
