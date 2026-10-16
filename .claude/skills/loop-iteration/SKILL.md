@@ -18,8 +18,9 @@ G = node scripts/loop-guard/cli.mjs
 上から順に確認し、最初に当てはまったものを実行する。
 
 1. `$G status` が `"stopped": true` → **停止済み**。ループを終了する（ScheduleWakeup を `stop: true` で呼ぶ）
-2. `needs-human` ラベルが付いていて open の issue がある（`gh issue list -l needs-human --state open`）
-   → それが処理順の途中にある issue なら、人間待ち。ループを終了する
+2. `loop:stopped` ラベルが付いた open の issue がある（`gh issue list -l loop:stopped --state open`）
+   → 人間の対応待ち。ループを終了する
+   （`human-task` ラベルの issue は人間が担当する作業なので、ループの判断には関係しない）
 3. `$G status` に作業中の issue がある → その issue の **手順 3** から再開する
 4. `loop:review` ラベルの issue がある → **手順 7（マージ待ち）** へ
 5. どれでもない → **手順 1** へ
@@ -98,17 +99,49 @@ Closes #<番号>
 
 ## 7. マージ待ち
 
-`loop:review` の issue に紐づく PR の状態を `gh pr view <PR> --json state,mergedAt` で確認する。
+`loop:review` の issue に紐づく PR を見張る。見張りは自分でスクリプトを書かず、必ず `watch-pr` を使う
+（リハーサル #17 で、その場で書いたスクリプトが誤報を出したため）。
 
-- マージ済み → `gh issue edit <番号> --remove-label loop:review` をして **手順 1** へ（このターンで続けてよい）
-- 未マージ → 何もせず ScheduleWakeup で 1200 秒後に再確認する
-- PR に変更依頼のコメントがある → 内容を issue の範囲内で反映し、手順 4 から（`$G start <番号>` で再開）
+`watch-pr` は「最後のコミットより後」に付いた、書き込み権限のある人のコメント・レビューを拾う。
+見張りを始める前（CI 待ちの間など）に付いたコメントも拾えるので、開始のタイミングは気にしなくてよい。
+ボット、書き込み権限のない人（Public リポジトリの部外者）、目印 `<!-- loop -->` を含むコメントは無視される。
+
+1. `pgrep -f "cli.mjs watch-pr <PR番号>( |$)"` で見張りが動いていないか確かめる（`( |$)` がないと PR 2 を探して 21 に当たる）
+2. 動いていなければ `$G watch-pr <PR番号>` を Bash の `run_in_background: true` で起動する
+3. 保険として ScheduleWakeup を 1800 秒で設定し、ターンを終える
+4. 見張りの完了通知が来たら、出力の1行を見て分岐する
+
+| 出力        | 対応                                                                                                |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| `MERGED`    | `gh issue edit <番号> --remove-label loop:review` をして **手順 1** へ（このターンで続けてよい）    |
+| `COMMENTED` | `gh pr view <PR番号> --comments` で読み、下の「PR のコメントへの対応」に従う                        |
+| `CLOSED`    | マージされずに閉じられた。issue にコメントして `loop:stopped` を付け、ループを終了する              |
+| `ERROR`     | PR の情報を取得できない（PR 番号の誤り・認証切れ・ネットワーク）。終了条件 E として **停止手順** へ |
+| `TIMEOUT`   | 見張りを再起動する                                                                                  |
+
+### PR のコメントへの対応
+
+ループが PR や issue に書くコメントには、**必ず1行目に `<!-- loop -->` を入れる**（自分のコメントに反応しないため）。
+
+- **変更依頼** → issue の範囲内で反映する。`$G start <番号>` で再開して手順 4 から。push すれば、そのコメントは対応済みとみなされる
+  - 注意：基準は push ではなく「最後のコミットの時刻」。修正中に人間が追加でコメントすると、その後のコミットで対応済み扱いになる。**push の直前に `gh pr view <PR番号> --comments` をもう一度読み、新しいコメントがないか確かめる**
+- **質問** → PR にコメントで答え、見張りを `--since` 付きで再起動する
+- **それ以外**（感想や範囲外の要望など）→ 範囲外の要望なら「別 issue にしましょう」とコメントし、見張りを `--since` 付きで再起動する
+
+push せずにコメントだけ返したときは、元のコメントがまだ「最後の push より後」に残っている。
+そのため、返信した時刻を `--since` に渡して、対応済みのコメントに再び反応しないようにする。
+
+```bash
+$G watch-pr <PR番号> --since "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+```
 
 ## 停止手順
 
 1. 作業中の変更をコミットし、`git push -u origin HEAD`
 2. `gh pr create --draft` で下書き PR を作る（PR がまだなければ）
 3. issue にコメント：停止理由（loop-guard の STOP 文言）、試したこと、エラーの要点、原因の推測、人間に判断してほしいこと
-4. `gh issue edit <番号> --remove-label loop:in-progress --add-label needs-human`
+4. `gh issue edit <番号> --remove-label loop:in-progress --add-label loop:stopped`
 5. PushNotification で「#<番号> で停止しました：<理由>」と通知
 6. ScheduleWakeup を `stop: true` で呼び、ループを終了する
+
+停止後の再開は人間が行う：原因に対応したら `loop:stopped` を外し、`$G finish` で状態を片付けてから `/loop /loop-iteration` を実行する。

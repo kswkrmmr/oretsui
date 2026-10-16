@@ -8,12 +8,14 @@
 //   node scripts/loop-guard/cli.mjs ci pass|fail        CI の結果を記録
 //   node scripts/loop-guard/cli.mjs check               終了条件だけ確認
 //   node scripts/loop-guard/cli.mjs stop "<理由>"        自分の判断で停止（仕様不明など）
+//   node scripts/loop-guard/cli.mjs watch-pr <PR番号> [--since <ISO時刻>]
+//                                      PR のマージ／クローズ／コメントを待つ（1行出して終了）
 //   node scripts/loop-guard/cli.mjs status              現在の状態を表示
 //   node scripts/loop-guard/cli.mjs finish              PR 作成後に状態を片付ける
 //
 // 終了コード: 0 = 続行してよい / 1 = 検証失敗（直して再実行） / 3 = 停止（STOP）
 
-import { execSync, spawnSync } from "node:child_process";
+import { execFileSync, execSync, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -27,6 +29,8 @@ import {
   applyVerify,
   evaluate,
   initialState,
+  prEvent,
+  WATCH_MAX_ERRORS,
   stop,
 } from "./core.mjs";
 
@@ -80,7 +84,7 @@ function judge(state, { failed = false } = {}) {
     save(stop(state, reason));
     console.log(`STOP: ${reason}`);
     console.log(
-      "→ 作業を下書きPRとして push し、issue に経緯をコメントして needs-human を付け、ループを止めてください",
+      "→ 作業を下書きPRとして push し、issue に経緯をコメントして loop:stopped を付け、ループを止めてください",
     );
     process.exit(EXIT.stop);
   }
@@ -92,6 +96,56 @@ function judge(state, { failed = false } = {}) {
     process.exit(EXIT.fail);
   }
   console.log("CONTINUE");
+  process.exit(EXIT.ok);
+}
+
+const WATCH_INTERVAL_MS = 30 * 1000;
+const WATCH_MAX_MS = 24 * 60 * 60 * 1000;
+
+function fetchPr(pr) {
+  const out = execFileSync(
+    "gh",
+    ["pr", "view", String(pr), "--json", "state,commits,comments,reviews"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  );
+  const { state, commits, comments, reviews } = JSON.parse(out);
+  return {
+    state,
+    lastPushedAt: commits.at(-1)?.committedDate ?? new Date(0).toISOString(),
+    comments,
+    reviews,
+  };
+}
+
+/**
+ * PR がマージ／クローズされるか、最後の push より後に人間のコメントが付くまで待ち、
+ * 1行出して終了する。取得に続けて失敗したら ERROR（PR 番号の誤り・認証切れなど）。
+ */
+async function watchPr(pr, since) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const deadline = Date.now() + WATCH_MAX_MS;
+  let errors = 0;
+  while (Date.now() < deadline) {
+    try {
+      const event = prEvent(fetchPr(pr), { since });
+      errors = 0;
+      if (event) {
+        console.log(`PR #${pr}: ${event}`);
+        process.exit(EXIT.ok);
+      }
+    } catch (e) {
+      errors += 1;
+      if (errors >= WATCH_MAX_ERRORS) {
+        const detail = String(e.stderr || e.message)
+          .trim()
+          .split("\n")[0];
+        console.log(`PR #${pr}: ERROR ${detail}`);
+        process.exit(EXIT.stop);
+      }
+    }
+    await sleep(WATCH_INTERVAL_MS);
+  }
+  console.log(`PR #${pr}: TIMEOUT`);
   process.exit(EXIT.ok);
 }
 
@@ -159,6 +213,16 @@ switch (cmd) {
     save(stop(requireState(), `手動停止: ${reason}`));
     console.log(`STOP: 手動停止: ${reason}`);
     process.exit(EXIT.stop);
+  }
+  case "watch-pr": {
+    const pr = Number(arg);
+    if (!pr) {
+      console.error("PR 番号を指定してください");
+      process.exit(EXIT.usage);
+    }
+    const sinceIdx = process.argv.indexOf("--since");
+    await watchPr(pr, sinceIdx > 0 ? process.argv[sinceIdx + 1] : undefined);
+    break;
   }
   case "status":
     console.log(JSON.stringify(load(), null, 2));
