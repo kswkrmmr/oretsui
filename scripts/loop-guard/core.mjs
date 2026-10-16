@@ -178,3 +178,15 @@ export function prEvent(pr, { since: handledAt } = {}) {
   );
   return newComments.length + newReviews.length > 0 ? "COMMENTED" : null;
 }
+
+/**
+ * 停止した issue を再開してよいか確かめる。問題なければ null、だめならその理由を返す。
+ * issue = { number, state: "OPEN" | "CLOSED", labels: string[] }
+ */
+export function resumeCheck(issue) {
+  if (issue.state !== "OPEN")
+    return `issue #${issue.number} は閉じられています`;
+  if (!issue.labels.includes("loop:stopped"))
+    return `issue #${issue.number} には loop:stopped が付いていません（停止していない issue は再開できません）`;
+  return null;
+}
