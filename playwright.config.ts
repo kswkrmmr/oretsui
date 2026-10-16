@@ -22,5 +22,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // E2E では本物の Google Maps を読み込まない（通信はテスト側で遮断する）。
+    // 地図コンテナを描画させるためにダミーのキーを渡す（#4 で許可）
+    env: { NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: "e2e-dummy-key" },
   },
 });
