@@ -25,7 +25,8 @@ G = node scripts/loop-guard/cli.mjs
 
 ## 1. 次の issue を選ぶ
 
-- `CLAUDE.md` の「処理順」の中で、open かつ `loop:ready` ラベルが付いた最初の issue を選ぶ
+- `rehearsal` と `loop:ready` の両方が付いた open の issue があれば、それを最優先で選ぶ（ループのリハーサル用）
+- なければ `CLAUDE.md` の「処理順」の中で、open かつ `loop:ready` ラベルが付いた最初の issue を選ぶ
 - 見つからなければ PushNotification で「着手できる issue がありません」と通知し、ループを終了する
 
 ## 2. 準備
