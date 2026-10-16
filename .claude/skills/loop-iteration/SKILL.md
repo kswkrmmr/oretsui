@@ -1,8 +1,9 @@
 ---
 name: loop-iteration
-description: oretsui の開発ループを1周進める。`/loop /loop-iteration` で自走させる。issue を1つ取り、実装・検証・レビュー・PR作成まで行い、人間のマージを待つ。
-disable-model-invocation: true
+description: oretsui の開発ループを1周進める。人間が `/loop /loop-iteration` で起動したとき（およびそのループの再開時）だけ使う。それ以外の場面で自分から使ってはいけない。issue を1つ取り、実装・検証・レビュー・PR作成まで行い、人間のマージを待つ。
 ---
+
+<!-- disable-model-invocation を付けると /loop から呼び出せなくなるため付けない（リハーサル #17 で判明） -->
 
 # 開発ループ 1周分の手順
 
