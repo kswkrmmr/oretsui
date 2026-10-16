@@ -9,6 +9,7 @@ import {
   evaluate,
   initialState,
   prEvent,
+  resumeCheck,
 } from "./core.mjs";
 
 const T0 = Date.UTC(2026, 9, 16, 0, 0, 0);
@@ -215,5 +216,27 @@ describe("prEvent の --since（ループが対応した時刻）", () => {
       comments: [{ ...base.comments[0], createdAt: "2026-10-16T09:00:00Z" }],
     };
     expect(prEvent(old, { since: "2026-10-16T08:00:00Z" })).toBeNull();
+  });
+});
+
+describe("resumeCheck", () => {
+  const stopped = {
+    number: 4,
+    state: "OPEN",
+    labels: ["feature", "loop:stopped"],
+  };
+
+  it("open で loop:stopped が付いていれば再開できる", () => {
+    expect(resumeCheck(stopped)).toBeNull();
+  });
+
+  it("閉じられた issue は再開できない", () => {
+    expect(resumeCheck({ ...stopped, state: "CLOSED" })).toMatch(/閉じられて/);
+  });
+
+  it("loop:stopped が付いていない issue は再開できない", () => {
+    expect(
+      resumeCheck({ ...stopped, labels: ["feature", "loop:ready"] }),
+    ).toMatch(/loop:stopped が付いていません/);
   });
 });

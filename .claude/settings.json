@@ -20,7 +20,9 @@
       "Bash(git push *)",
       "Bash(gh issue *)",
       "Bash(gh pr *)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(git ls-remote*)",
+      "Bash(git merge main*)"
     ],
     "deny": [
       "Read(./.env)",

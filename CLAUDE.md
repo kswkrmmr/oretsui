@@ -28,12 +28,13 @@
 #4 → #13 → #5 → #6 → #7 → #8 → #9 → #10 → #11
 
 人間が仕様を確認して `loop:ready` ラベルを付けた issue だけに着手する。
-`rehearsal` ラベルの issue（ループのリハーサル用）は処理順より優先する。
+`rehearsal` ラベルの issue（ループのリハーサル用）は処理順より優先する。リハーサルで止まった issue は本番のループを止めない。
 
 ### ラベル
 
 `loop:ready` → `loop:in-progress` → `loop:review` →（人間がマージ）→ close
-止まったら `loop:stopped`。人間が担当する issue は `human-task`
+止まったら `loop:stopped`。人間が判断をコメントし、`node scripts/loop-guard/cli.mjs resume <番号>` → `/loop /loop-iteration` で再開する。
+人間が担当する issue は `human-task`
 
 ### ルール
 

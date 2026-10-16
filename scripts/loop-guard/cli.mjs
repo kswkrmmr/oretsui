@@ -12,6 +12,7 @@
 //                                      PR のマージ／クローズ／コメントを待つ（1行出して終了）
 //   node scripts/loop-guard/cli.mjs status              現在の状態を表示
 //   node scripts/loop-guard/cli.mjs finish              PR 作成後に状態を片付ける
+//   node scripts/loop-guard/cli.mjs resume <issue番号>  （人間用）停止した issue を再開できる状態に戻す
 //
 // 終了コード: 0 = 続行してよい / 1 = 検証失敗（直して再実行） / 3 = 停止（STOP）
 
@@ -30,6 +31,7 @@ import {
   evaluate,
   initialState,
   prEvent,
+  resumeCheck,
   WATCH_MAX_ERRORS,
   stop,
 } from "./core.mjs";
@@ -224,6 +226,70 @@ switch (cmd) {
     await watchPr(pr, sinceIdx > 0 ? process.argv[sinceIdx + 1] : undefined);
     break;
   }
+  case "resume": {
+    // 人間用：停止した issue をループで再開できる状態に戻す
+    const number = Number(arg);
+    if (!number) {
+      console.error("issue 番号を指定してください");
+      process.exit(EXIT.usage);
+    }
+    const gh = (...args) => {
+      try {
+        return execFileSync("gh", args, {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+      } catch (e) {
+        const detail = String(e.stderr || e.message)
+          .trim()
+          .split("\n")[0];
+        console.error(`再開できません: gh の実行に失敗しました（${detail}）`);
+        process.exit(EXIT.usage);
+      }
+    };
+    const { state, labels } = JSON.parse(
+      gh("issue", "view", String(number), "--json", "state,labels"),
+    );
+    const problem = resumeCheck({
+      number,
+      state,
+      labels: labels.map((l) => l.name),
+    });
+    if (problem) {
+      console.error(`再開できません: ${problem}`);
+      process.exit(EXIT.usage);
+    }
+    // PR 作成後に止まった場合の loop:review なども残さない（残すと「マージ待ち」と誤判定される）
+    gh(
+      "issue",
+      "edit",
+      String(number),
+      "--remove-label",
+      "loop:stopped",
+      "--remove-label",
+      "loop:review",
+      "--remove-label",
+      "loop:in-progress",
+      "--add-label",
+      "loop:ready",
+    );
+    // 別の issue（リハーサルなど）の作業中の状態は消さない
+    const current = load();
+    if (!current || current.issue === number) {
+      rmSync(DIR, { recursive: true, force: true });
+    } else {
+      console.log(
+        `注意: loop-guard の状態は issue #${current.issue} のものなので残しました`,
+      );
+    }
+    console.log(
+      `issue #${number} を再開できる状態にしました（loop:stopped → loop:ready）`,
+    );
+    console.log(
+      "→ 判断を issue にコメントしてから `/loop /loop-iteration` を実行してください",
+    );
+    break;
+  }
   case "status":
     console.log(JSON.stringify(load(), null, 2));
     break;
@@ -233,7 +299,7 @@ switch (cmd) {
     break;
   default:
     console.error(
-      "使い方: loop-guard <start|verify|review|ci|check|stop|status|finish>",
+      "使い方: loop-guard <start|verify|review|ci|check|stop|watch-pr|status|finish|resume>",
     );
     process.exit(EXIT.usage);
 }

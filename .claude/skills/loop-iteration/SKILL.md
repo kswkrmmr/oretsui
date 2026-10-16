@@ -18,8 +18,9 @@ G = node scripts/loop-guard/cli.mjs
 上から順に確認し、最初に当てはまったものを実行する。
 
 1. `$G status` が `"stopped": true` → **停止済み**。ループを終了する（ScheduleWakeup を `stop: true` で呼ぶ）
-2. `loop:stopped` ラベルが付いた open の issue がある（`gh issue list -l loop:stopped --state open`）
+2. `loop:stopped` ラベルが付いた open の issue がある（`gh issue list -l loop:stopped --state open --search "-label:rehearsal"`）
    → 人間の対応待ち。ループを終了する
+   （`rehearsal` ラベルの issue はコマンドで除いている。リハーサルで止まった issue が本番のループを止めないようにするため。#22 で判明）
    （`human-task` ラベルの issue は人間が担当する作業なので、ループの判断には関係しない）
 3. `$G status` に作業中の issue がある → その issue の **手順 3** から再開する
 4. `loop:review` ラベルの issue がある → **手順 7（マージ待ち）** へ
@@ -33,9 +34,27 @@ G = node scripts/loop-guard/cli.mjs
 
 ## 2. 準備
 
+まず、この issue の作業ブランチがすでにあるか確かめる（停止からの再開では、前回のブランチと下書き PR が残っている。#4 で判明）。
+
 ```bash
 git switch main && git pull
-git switch -c issue-<番号>-<英語の短い説明>
+git ls-remote --heads origin "issue-<番号>-*"   # リモート
+git branch --list "issue-<番号>-*"               # ローカル（変更なしで止まった場合は push されていない）
+```
+
+- **ブランチがない** → 新しく切る
+  ```bash
+  git switch -c issue-<番号>-<英語の短い説明>
+  ```
+- **ブランチがある**（再開）→ それに切り替えて main を取り込む。下書き PR があればそのまま使う
+  ```bash
+  git switch <ブランチ名>
+  git pull   # リモートにある場合のみ
+  git merge main
+  ```
+  手順3では、issue の最新コメント（人間の判断）を必ず読んでから続きを行う
+
+```bash
 gh issue edit <番号> --remove-label loop:ready --add-label loop:in-progress
 $G start <番号>
 ```
@@ -111,13 +130,13 @@ Closes #<番号>
 3. 保険として ScheduleWakeup を 1800 秒で設定し、ターンを終える
 4. 見張りの完了通知が来たら、出力の1行を見て分岐する
 
-| 出力        | 対応                                                                                                |
-| ----------- | --------------------------------------------------------------------------------------------------- |
-| `MERGED`    | `gh issue edit <番号> --remove-label loop:review` をして **手順 1** へ（このターンで続けてよい）    |
-| `COMMENTED` | `gh pr view <PR番号> --comments` で読み、下の「PR のコメントへの対応」に従う                        |
-| `CLOSED`    | マージされずに閉じられた。issue にコメントして `loop:stopped` を付け、ループを終了する              |
-| `ERROR`     | PR の情報を取得できない（PR 番号の誤り・認証切れ・ネットワーク）。終了条件 E として **停止手順** へ |
-| `TIMEOUT`   | 見張りを再起動する                                                                                  |
+| 出力        | 対応                                                                                                                                       |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `MERGED`    | `gh issue edit <番号> --remove-label loop:review` をして **手順 1** へ（このターンで続けてよい）                                           |
+| `COMMENTED` | `gh pr view <PR番号> --comments` で読み、下の「PR のコメントへの対応」に従う                                                               |
+| `CLOSED`    | マージされずに閉じられた。issue にコメントし、`--remove-label loop:review --add-label loop:stopped` でラベルを付け替えて、ループを終了する |
+| `ERROR`     | PR の情報を取得できない（PR 番号の誤り・認証切れ・ネットワーク）。終了条件 E として **停止手順** へ                                        |
+| `TIMEOUT`   | 見張りを再起動する                                                                                                                         |
 
 ### PR のコメントへの対応
 
@@ -137,11 +156,21 @@ $G watch-pr <PR番号> --since "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 ## 停止手順
 
-1. 作業中の変更をコミットし、`git push -u origin HEAD`
-2. `gh pr create --draft` で下書き PR を作る（PR がまだなければ）
-3. issue にコメント：停止理由（loop-guard の STOP 文言）、試したこと、エラーの要点、原因の推測、人間に判断してほしいこと
-4. `gh issue edit <番号> --remove-label loop:in-progress --add-label loop:stopped`
-5. PushNotification で「#<番号> で停止しました：<理由>」と通知
+1. `git status --short` で**未コミットの変更**があるか確かめる
+   - **ある** → コミットして `git push -u origin HEAD`
+   - **ない** → コミットしない（再開後に何も変えずにまた止まった場合など）
+   - そのうえで `git diff main --stat` に差分があり、PR がまだなければ `gh pr create --draft` で下書き PR を作る。main との差分もなければ（実装前に止まった）PR は作らず、issue のコメントに「変更はありません」と書く
+2. issue にコメント：停止理由（loop-guard の STOP 文言）、試したこと、エラーの要点、原因の推測、人間に判断してほしいこと
+3. `gh issue edit <番号> --remove-label loop:in-progress --remove-label loop:review --add-label loop:stopped`
+   （PR 作成後に止まった場合〔CI の失敗、watch-pr の ERROR など〕は `loop:review` が付いている。残すと再開後に「マージ待ち」と誤判定する）
+4. PushNotification で「#<番号> で停止しました：<理由>」と通知
+5. **リハーサル issue（`rehearsal` ラベル）の場合だけ** `$G finish` で状態を片付ける（本番のループの再開を妨げないため）
 6. ScheduleWakeup を `stop: true` で呼び、ループを終了する
 
-停止後の再開は人間が行う：原因に対応したら `loop:stopped` を外し、`$G finish` で状態を片付けてから `/loop /loop-iteration` を実行する。
+### 停止後の再開（人間が行う）
+
+1. issue に判断をコメントする
+2. `node scripts/loop-guard/cli.mjs resume <番号>` を実行する（`loop:stopped` → `loop:ready`、状態の片付けをまとめて行う）
+3. `/loop /loop-iteration` を実行する
+
+ループは手順2で既存のブランチを見つけて、続きから再開する。
