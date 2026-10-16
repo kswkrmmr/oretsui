@@ -3,3 +3,12 @@ export function formatDistance(meters: number): string {
   if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(1)} km`;
 }
+
+/** 秒を「25分」「1時間5分」のような表示用文字列にする（最短でも「1分」） */
+export function formatDuration(seconds: number): string {
+  const totalMinutes = Math.max(1, Math.round(seconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}分`;
+  return minutes === 0 ? `${hours}時間` : `${hours}時間${minutes}分`;
+}
