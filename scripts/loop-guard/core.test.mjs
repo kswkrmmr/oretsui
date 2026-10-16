@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   LIMITS,
+  LOOP_COMMENT_MARKER,
   applyCi,
   applyReview,
   applyVerify,
   errorSignature,
   evaluate,
   initialState,
+  prEvent,
 } from "./core.mjs";
 
 const T0 = Date.UTC(2026, 9, 16, 0, 0, 0);
@@ -94,5 +96,124 @@ describe("evaluate", () => {
         diffLines: LIMITS.diffLines + 1,
       }),
     ).toMatch(/^G\./);
+  });
+});
+
+describe("prEvent", () => {
+  const PUSHED = "2026-10-16T10:00:00Z";
+  const BEFORE = "2026-10-16T09:59:00Z";
+  const AFTER = "2026-10-16T10:01:00Z";
+  const human = { login: "kswkrmmr" };
+  const open = {
+    state: "OPEN",
+    lastPushedAt: PUSHED,
+    comments: [],
+    reviews: [],
+  };
+  const comment = (createdAt, extra = {}) => ({
+    createdAt,
+    author: human,
+    authorAssociation: "OWNER",
+    body: "ここを直してください",
+    ...extra,
+  });
+
+  it("変化がなければ null", () => {
+    expect(prEvent(open)).toBeNull();
+  });
+
+  it("マージされたら MERGED", () => {
+    expect(prEvent({ ...open, state: "MERGED" })).toBe("MERGED");
+  });
+
+  it("マージせずに閉じられたら CLOSED", () => {
+    expect(prEvent({ ...open, state: "CLOSED" })).toBe("CLOSED");
+  });
+
+  it("最後の push より後の人間のコメントは COMMENTED", () => {
+    expect(prEvent({ ...open, comments: [comment(AFTER)] })).toBe("COMMENTED");
+  });
+
+  it("最後の push より後のレビューは COMMENTED", () => {
+    const review = {
+      submittedAt: AFTER,
+      author: human,
+      authorAssociation: "OWNER",
+      body: "",
+    };
+    expect(prEvent({ ...open, reviews: [review] })).toBe("COMMENTED");
+  });
+
+  it("最後の push より前のコメントは対応済みとみなす", () => {
+    expect(prEvent({ ...open, comments: [comment(BEFORE)] })).toBeNull();
+  });
+
+  it("ボットのコメントは無視する（gh の実際の出力の形）", () => {
+    const bots = [
+      // gh では "[bot]" が付かず、authorAssociation も CONTRIBUTOR になる
+      comment(AFTER, {
+        author: { login: "github-actions" },
+        authorAssociation: "CONTRIBUTOR",
+      }),
+      comment(AFTER, { author: { login: "vercel" } }),
+      comment(AFTER, { author: { login: "renovate[bot]" } }),
+    ];
+    expect(prEvent({ ...open, comments: bots })).toBeNull();
+  });
+
+  it("書き込み権限のない人のコメントは無視する（Public リポジトリの部外者）", () => {
+    const outsiders = [
+      comment(AFTER, { authorAssociation: "NONE" }),
+      comment(AFTER, { authorAssociation: "CONTRIBUTOR" }),
+    ];
+    expect(prEvent({ ...open, comments: outsiders })).toBeNull();
+  });
+
+  it("共同作業者のコメントは拾う", () => {
+    const c = comment(AFTER, { authorAssociation: "COLLABORATOR" });
+    expect(prEvent({ ...open, comments: [c] })).toBe("COMMENTED");
+  });
+
+  it("ループ自身のコメント（目印付き）は無視する", () => {
+    const own = comment(AFTER, { body: `${LOOP_COMMENT_MARKER}\n回答です` });
+    expect(prEvent({ ...open, comments: [own] })).toBeNull();
+  });
+
+  it("コメントとマージが同時ならマージを優先する", () => {
+    expect(
+      prEvent({ ...open, state: "MERGED", comments: [comment(AFTER)] }),
+    ).toBe("MERGED");
+  });
+});
+
+describe("prEvent の --since（ループが対応した時刻）", () => {
+  const base = {
+    state: "OPEN",
+    lastPushedAt: "2026-10-16T10:00:00Z",
+    reviews: [],
+    comments: [
+      {
+        createdAt: "2026-10-16T10:05:00Z",
+        author: { login: "kswkrmmr" },
+        authorAssociation: "OWNER",
+        body: "これは何のための変更？",
+      },
+    ],
+  };
+
+  it("対応済みの質問には、再起動後に反応しない", () => {
+    expect(prEvent(base, { since: "2026-10-16T10:06:00Z" })).toBeNull();
+  });
+
+  it("対応した後に付いた新しいコメントには反応する", () => {
+    expect(prEvent(base, { since: "2026-10-16T10:04:00Z" })).toBe("COMMENTED");
+  });
+
+  it("since が push より前なら push の時刻を基準にする", () => {
+    const old = {
+      ...base,
+      comments: [{ ...base.comments[0], createdAt: "2026-10-16T09:00:00Z" }],
+    };
+    expect(prEvent(old, { since: "2026-10-16T08:00:00Z" })).toBeNull();
   });
 });

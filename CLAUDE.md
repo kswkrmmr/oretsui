@@ -33,7 +33,7 @@
 ### ラベル
 
 `loop:ready` → `loop:in-progress` → `loop:review` →（人間がマージ）→ close
-止まったら `needs-human`
+止まったら `loop:stopped`。人間が担当する issue は `human-task`
 
 ### ルール
 

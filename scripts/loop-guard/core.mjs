@@ -130,3 +130,51 @@ export function evaluate(state, { now, diffLines }) {
     return `G. 差分が${diffLines}行あります（上限${LIMITS.diffLines}行）`;
   return null;
 }
+/** ループ自身が PR に書くコメントに付ける目印。見張りの対象から外すために使う */
+export const LOOP_COMMENT_MARKER = "<!-- loop -->";
+
+/** watch-pr が PR 情報の取得に何回続けて失敗したら諦めるか */
+export const WATCH_MAX_ERRORS = 3;
+
+/** リポジトリへの書き込み権限がある人だけを「人間のレビュアー」とみなす（Public リポジトリなので部外者は除く） */
+const TRUSTED_ASSOCIATIONS = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+
+/**
+ * gh の出力ではボットの login に "[bot]" が付かない（例: "github-actions"）ため、名前でも判定する。
+ * authorAssociation もボットが CONTRIBUTOR になることがあり、それだけでは区別できない。
+ */
+const BOT_LOGINS =
+  /^(github-actions|dependabot|renovate|vercel|netlify|codecov|copilot.*)$|\[bot\]$/i;
+
+/**
+ * PR の見張り：ループが反応すべき出来事を返す。何も起きていなければ null。
+ * 「最後の push より後」の人間のコメント・レビューだけを数えるので、
+ * 見張りを始める前に付いたコメントも拾える（CI 待ちの間の変更依頼など）。
+ *
+ * pr = {
+ *   state: "OPEN" | "MERGED" | "CLOSED",
+ *   lastPushedAt: ISO文字列,
+ *   comments: [{ createdAt, author: { login }, authorAssociation, body }],
+ *   reviews: [{ submittedAt, author: { login }, authorAssociation, body }],
+ * }
+ */
+export function prEvent(pr, { since: handledAt } = {}) {
+  if (pr.state === "MERGED") return "MERGED";
+  if (pr.state === "CLOSED") return "CLOSED";
+  // 最後の push か、ループが最後に対応した時刻（--since）の遅い方より後だけを見る
+  const since = Math.max(
+    Date.parse(pr.lastPushedAt),
+    Date.parse(handledAt ?? 0) || 0,
+  );
+  const fromHuman = (item) =>
+    TRUSTED_ASSOCIATIONS.has(item.authorAssociation) &&
+    !BOT_LOGINS.test(item.author?.login ?? "") &&
+    !(item.body ?? "").includes(LOOP_COMMENT_MARKER);
+  const newComments = pr.comments.filter(
+    (c) => Date.parse(c.createdAt) > since && fromHuman(c),
+  );
+  const newReviews = pr.reviews.filter(
+    (r) => Date.parse(r.submittedAt) > since && fromHuman(r),
+  );
+  return newComments.length + newReviews.length > 0 ? "COMMENTED" : null;
+}
