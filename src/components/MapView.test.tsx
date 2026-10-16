@@ -9,12 +9,37 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MapView } from "./MapView";
 
 // テストで本物の Google Maps を読み込まないよう、ライブラリをモックする
-const mocks = vi.hoisted(() => ({
-  mapProps: null as Record<string, unknown> | null,
-  panTo: vi.fn(),
-  // 本物と同じく、同じ地図には同じオブジェクトを返す
-  map: null as { panTo: () => void } | null,
-}));
+const mocks = vi.hoisted(() => {
+  const panTo = vi.fn();
+  // 地図の div。幅 400・高さ 800 で画面の左上にあるものとする
+  const div = document.createElement("div");
+  div.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 400, height: 800 }) as DOMRect;
+  // 計算を追いやすいよう、経度をそのまま x、緯度を反転して y にする投影にする
+  const projection = {
+    fromLatLngToPoint: (latLng: { lat: () => number; lng: () => number }) => ({
+      x: latLng.lng(),
+      y: -latLng.lat(),
+    }),
+    fromPointToLatLng: (point: { x: number; y: number }) => ({
+      lat: () => -point.y,
+      lng: () => point.x,
+    }),
+  };
+  return {
+    mapProps: null as Record<string, unknown> | null,
+    panTo,
+    div,
+    // 本物と同じく、同じ地図には同じオブジェクトを返す。中心は北緯30度・東経100度、ズーム0
+    map: {
+      panTo,
+      getDiv: () => div,
+      getProjection: () => projection,
+      getCenter: () => ({ lat: () => 30, lng: () => 100 }),
+      getZoom: () => 0,
+    },
+  };
+});
 vi.mock("@vis.gl/react-google-maps", () => ({
   APIProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   Map: ({
@@ -24,7 +49,7 @@ vi.mock("@vis.gl/react-google-maps", () => ({
     mocks.mapProps = props;
     return <div data-testid="google-map">{children}</div>;
   },
-  useMap: () => (mocks.map ??= { panTo: mocks.panTo }),
+  useMap: () => mocks.map,
   AdvancedMarker: ({ children }: { children?: React.ReactNode }) => (
     <div data-testid="marker">{children}</div>
   ),
@@ -78,10 +103,22 @@ describe("MapView", () => {
       ...navigator,
       geolocation: { getCurrentPosition: geo.getCurrentPosition },
     });
+    // 本物の Google Maps を読み込まないので、座標の入れ物だけ用意する
+    vi.stubGlobal("google", {
+      maps: {
+        Point: class {
+          constructor(
+            public x: number,
+            public y: number,
+          ) {}
+        },
+      },
+    });
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -196,5 +233,70 @@ describe("MapView", () => {
     succeed();
     expect(mocks.panTo).toHaveBeenCalledWith(HERE);
     expect(container()).toHaveAttribute("data-start-source", "current");
+  });
+
+  // iOS は長押しで contextmenu を出さないため、指の押し続けを自前で判定する
+  describe("指での長押し", () => {
+    // 地図の (250, 380) は、中心 (200, 400) から右に50・上に20。ズーム0なので北緯50度・東経150度
+    const PRESS = { clientX: 250, clientY: 380 };
+    const touch = (pointerId = 1) => ({ pointerType: "touch", pointerId });
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      render(<MapView apiKey="test-key" />);
+      succeed();
+    });
+
+    const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+
+    it("500ms 押し続けると、その場所が出発点になる", () => {
+      fireEvent.pointerDown(mocks.div, { ...touch(), ...PRESS });
+      wait(499);
+      expect(container()).toHaveAttribute("data-start-source", "current");
+      wait(1);
+      expect(container()).toHaveAttribute("data-start-lat", "50");
+      expect(container()).toHaveAttribute("data-start-lng", "150");
+      expect(container()).toHaveAttribute("data-start-source", "manual");
+    });
+
+    it("500ms より前に指を離すと、出発点は変わらない", () => {
+      fireEvent.pointerDown(mocks.div, { ...touch(), ...PRESS });
+      wait(300);
+      fireEvent.pointerUp(mocks.div, { ...touch(), ...PRESS });
+      wait(500);
+      expect(container()).toHaveAttribute("data-start-source", "current");
+    });
+
+    it("押したまま 10px 以上動かす（ドラッグ）と、出発点は変わらない", () => {
+      fireEvent.pointerDown(mocks.div, { ...touch(), ...PRESS });
+      fireEvent.pointerMove(mocks.div, {
+        ...touch(),
+        clientX: 250,
+        clientY: 390,
+      });
+      wait(500);
+      expect(container()).toHaveAttribute("data-start-source", "current");
+    });
+
+    it("2本目の指が触れる（ピンチ）と、出発点は変わらない", () => {
+      fireEvent.pointerDown(mocks.div, { ...touch(1), ...PRESS });
+      fireEvent.pointerDown(mocks.div, {
+        ...touch(2),
+        clientX: 100,
+        clientY: 100,
+      });
+      wait(500);
+      expect(container()).toHaveAttribute("data-start-source", "current");
+    });
+
+    it("マウスの押し続けには反応しない（PC は右クリックで指定する）", () => {
+      fireEvent.pointerDown(mocks.div, {
+        pointerType: "mouse",
+        pointerId: 1,
+        ...PRESS,
+      });
+      wait(500);
+      expect(container()).toHaveAttribute("data-start-source", "current");
+    });
   });
 });

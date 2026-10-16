@@ -10,8 +10,14 @@ import {
 } from "@vis.gl/react-google-maps";
 import { useEffect } from "react";
 import { useStartPoint } from "@/hooks/useStartPoint";
+import {
+  LONG_PRESS_MS,
+  movedTooFar,
+  pixelToWorldPoint,
+  type Point,
+} from "@/lib/long-press";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
-import type { StartPointState } from "@/lib/start-point";
+import type { LatLng, StartPointState } from "@/lib/start-point";
 
 type Props = {
   apiKey: string;
@@ -51,10 +57,11 @@ export function MapView({ apiKey }: Props) {
               mapId={MAP_ID}
               className="h-full w-full"
               onClick={onMapEvent(tap)}
-              // タッチ端末では長押しで contextmenu が発火する
+              // PC の右クリックと Android の長押し用（iOS の長押しは LongPressHandler で受ける）
               onContextmenu={onMapEvent(longPress)}
             >
               <CenterController request={state.centerRequest} />
+              <LongPressHandler onLongPress={longPress} />
               {state.current && (
                 <AdvancedMarker position={state.current} title="現在地">
                   <div
@@ -119,4 +126,83 @@ function CenterController({
     if (map && request) map.panTo(request.position);
   }, [map, request]);
   return null;
+}
+
+/**
+ * 指での長押しを判定する。iOS は長押しで contextmenu を出さないため、
+ * 指が触れてから動かさずに押し続けたかを自前で見る
+ */
+function LongPressHandler({
+  onLongPress,
+}: {
+  onLongPress: (position: LatLng) => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    const div = map.getDiv();
+    const touching = new Set<number>();
+    let start: Point | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const cancel = () => {
+      clearTimeout(timer);
+      start = null;
+    };
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      touching.add(e.pointerId);
+      // 2本目の指が触れたらピンチなので取り消す
+      if (touching.size > 1) return cancel();
+      const pressed = { x: e.clientX, y: e.clientY };
+      start = pressed;
+      timer = setTimeout(() => {
+        start = null;
+        const position = pixelToLatLng(map, pressed);
+        if (position) onLongPress(position);
+      }, LONG_PRESS_MS);
+    };
+    const move = (e: PointerEvent) => {
+      if (start && movedTooFar(start, { x: e.clientX, y: e.clientY })) cancel();
+    };
+    const up = (e: PointerEvent) => {
+      touching.delete(e.pointerId);
+      cancel();
+    };
+
+    // 地図が中で止めないよう、キャプチャ段階で受ける
+    const listeners = [
+      ["pointerdown", down],
+      ["pointermove", move],
+      ["pointerup", up],
+      ["pointercancel", up],
+    ] as const;
+    for (const [type, listener] of listeners)
+      div.addEventListener(type, listener, true);
+    return () => {
+      cancel();
+      for (const [type, listener] of listeners)
+        div.removeEventListener(type, listener, true);
+    };
+  }, [map, onLongPress]);
+  return null;
+}
+
+/** 画面上の位置を、地図上の緯度・経度に変える */
+function pixelToLatLng(map: google.maps.Map, client: Point): LatLng | null {
+  const projection = map.getProjection();
+  const center = map.getCenter();
+  const zoom = map.getZoom();
+  if (!projection || !center || zoom === undefined) return null;
+  const centerWorld = projection.fromLatLngToPoint(center);
+  if (!centerWorld) return null;
+  const rect = map.getDiv().getBoundingClientRect();
+  const world = pixelToWorldPoint(centerWorld, zoom, rect, {
+    x: client.x - rect.left,
+    y: client.y - rect.top,
+  });
+  const latLng = projection.fromPointToLatLng(
+    new google.maps.Point(world.x, world.y),
+  );
+  return latLng ? { lat: latLng.lat(), lng: latLng.lng() } : null;
 }
