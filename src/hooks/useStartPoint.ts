@@ -46,11 +46,12 @@ export function useStartPoint() {
     [],
   );
 
+  const hasCurrent = state.current !== null;
   /** 現在地があれば中心を移し、なければ取得をやり直す */
   const recenter = useCallback(() => {
-    if (state.current) dispatch({ type: "recenter" });
+    if (hasCurrent) dispatch({ type: "recenter" });
     else locate();
-  }, [state.current, locate]);
+  }, [hasCurrent, locate]);
 
   return { state, tap, longPress, recenter };
 }

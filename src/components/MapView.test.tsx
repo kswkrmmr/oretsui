@@ -12,6 +12,8 @@ import { MapView } from "./MapView";
 const mocks = vi.hoisted(() => ({
   mapProps: null as Record<string, unknown> | null,
   panTo: vi.fn(),
+  // 本物と同じく、同じ地図には同じオブジェクトを返す
+  map: null as { panTo: () => void } | null,
 }));
 vi.mock("@vis.gl/react-google-maps", () => ({
   APIProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -22,7 +24,7 @@ vi.mock("@vis.gl/react-google-maps", () => ({
     mocks.mapProps = props;
     return <div data-testid="google-map">{children}</div>;
   },
-  useMap: () => ({ panTo: mocks.panTo }),
+  useMap: () => (mocks.map ??= { panTo: mocks.panTo }),
   AdvancedMarker: ({ children }: { children?: React.ReactNode }) => (
     <div data-testid="marker">{children}</div>
   ),

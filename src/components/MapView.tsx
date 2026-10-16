@@ -73,7 +73,7 @@ export function MapView({ apiKey }: Props) {
           {state.showNotice && (
             <p
               role="status"
-              className="absolute top-[calc(max(0.5rem,env(safe-area-inset-top))+2.5rem)] right-4 left-4 rounded-lg bg-white/90 px-3 py-2 text-center text-sm text-neutral-900 shadow"
+              className="pointer-events-none absolute top-[calc(max(0.5rem,env(safe-area-inset-top))+2.5rem)] right-4 left-4 rounded-lg bg-white/90 px-3 py-2 text-center text-sm text-neutral-900 shadow"
             >
               位置情報が使えません。地図をタップして出発点を選んでください
             </p>
