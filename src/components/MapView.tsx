@@ -8,7 +8,8 @@ import {
   useMap,
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ConditionSheet } from "@/components/ConditionSheet";
 import { useStartPoint } from "@/hooks/useStartPoint";
 import {
   LONG_PRESS_MS,
@@ -27,8 +28,9 @@ type Props = {
 export function MapView({ apiKey }: Props) {
   const { state, tap, longPress, recenter } = useStartPoint();
   const { start } = state;
+  const [routeDistance, setRouteDistance] = useState<number | null>(null);
 
-  // 地図の外からも出発点を確かめられるよう、入れ物に座標を出す（E2E 用）
+  // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
     ? {
         "data-start-lat": start.position.lat,
@@ -36,6 +38,8 @@ export function MapView({ apiKey }: Props) {
         "data-start-source": start.source,
       }
     : {};
+  const routeAttributes =
+    routeDistance === null ? {} : { "data-route-distance": routeDistance };
 
   const onMapEvent =
     (handler: typeof tap) =>
@@ -48,6 +52,7 @@ export function MapView({ apiKey }: Props) {
       data-testid="map"
       className="fixed inset-0 h-dvh w-full"
       {...startAttributes}
+      {...routeAttributes}
     >
       {apiKey ? (
         <>
@@ -85,24 +90,34 @@ export function MapView({ apiKey }: Props) {
               位置情報が使えません。地図をタップして出発点を選んでください
             </p>
           )}
-          <button
-            type="button"
-            aria-label="現在地に戻る"
-            onClick={recenter}
-            className="absolute right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] flex h-14 w-14 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-neutral-100"
-          >
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
+          {/* 片手で届く画面下部に、条件のシートと、そのすぐ上に「現在地に戻る」を置く */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-end gap-3">
+            <button
+              type="button"
+              aria-label="現在地に戻る"
+              onClick={recenter}
+              className="pointer-events-auto mr-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-neutral-100"
             >
-              <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-            </svg>
-          </button>
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+              </svg>
+            </button>
+            <div className="pointer-events-auto w-full">
+              <ConditionSheet
+                disabled={!start}
+                // ルートの生成は #6 で実装する。いまは目標距離を受け取るところまで
+                onGenerate={setRouteDistance}
+              />
+            </div>
+          </div>
         </>
       ) : (
         <div className="flex h-full items-center justify-center p-4">

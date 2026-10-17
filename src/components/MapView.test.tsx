@@ -235,6 +235,20 @@ describe("MapView", () => {
     expect(container()).toHaveAttribute("data-start-source", "current");
   });
 
+  it("出発点がないうちは「ルートを作る」を押せない", () => {
+    render(<MapView apiKey="test-key" />);
+    fail(1);
+    expect(screen.getByRole("button", { name: "ルートを作る" })).toBeDisabled();
+  });
+
+  it("「ルートを作る」を押すと、目標距離を data-route-distance に出す", () => {
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    expect(container()).not.toHaveAttribute("data-route-distance");
+    fireEvent.click(screen.getByRole("button", { name: "ルートを作る" }));
+    expect(container()).toHaveAttribute("data-route-distance", "2400");
+  });
+
   // iOS は長押しで contextmenu を出さないため、指の押し続けを自前で判定する
   describe("指での長押し", () => {
     // 地図の (250, 380) は、中心 (200, 400) から右に50・上に20。ズーム0なので北緯50度・東経150度
