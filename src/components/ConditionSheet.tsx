@@ -17,10 +17,19 @@ type Props = {
   disabled: boolean;
   /** 「ルートを作る」を押したときに、目標距離（m）を渡して呼ぶ */
   onGenerate: (meters: number) => void;
+  /** ルートを作成中なら、ボタンを押せなくして「作成中」と表示する */
+  loading?: boolean;
+  /** シートの上部に出す、作ったルートの情報やエラー */
+  status?: React.ReactNode;
 };
 
 /** 画面下の、散歩の条件を選ぶシート */
-export function ConditionSheet({ disabled, onGenerate }: Props) {
+export function ConditionSheet({
+  disabled,
+  onGenerate,
+  loading = false,
+  status,
+}: Props) {
   const [conditions, setConditions] = useState(INITIAL_CONDITIONS);
   const update = (change: Partial<WalkConditions>) =>
     setConditions((current) => ({ ...current, ...change }));
@@ -31,6 +40,7 @@ export function ConditionSheet({ disabled, onGenerate }: Props) {
       aria-label="散歩の条件"
       className="w-full space-y-2 rounded-t-2xl bg-white px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-neutral-900 shadow-[0_-4px_16px_rgba(0,0,0,0.15)]"
     >
+      {status}
       <ChoiceRow>
         <Choice
           label="時間"
@@ -89,11 +99,11 @@ export function ConditionSheet({ disabled, onGenerate }: Props) {
         </p>
         <button
           type="button"
-          disabled={disabled}
+          disabled={disabled || loading}
           onClick={() => onGenerate(meters)}
           className="min-h-12 flex-1 rounded-xl bg-green-600 font-bold text-white active:bg-green-700 disabled:bg-neutral-300 disabled:text-neutral-500"
         >
-          ルートを作る
+          {loading ? "ルートを作成中…" : "ルートを作る"}
         </button>
       </div>
     </section>

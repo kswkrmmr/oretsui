@@ -8,9 +8,11 @@ import {
   useMap,
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConditionSheet } from "@/components/ConditionSheet";
+import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
 import { useStartPoint } from "@/hooks/useStartPoint";
+import { formatDistance, formatDuration } from "@/lib/format";
 import {
   LONG_PRESS_MS,
   movedTooFar,
@@ -18,6 +20,7 @@ import {
   type Point,
 } from "@/lib/long-press";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
+import { decodePolyline } from "@/lib/polyline";
 import type { LatLng, StartPointState } from "@/lib/start-point";
 
 type Props = {
@@ -29,6 +32,7 @@ export function MapView({ apiKey }: Props) {
   const { state, tap, longPress, recenter } = useStartPoint();
   const { start } = state;
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  const { state: route, generate, retry } = useLoopRoute();
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -80,6 +84,9 @@ export function MapView({ apiKey }: Props) {
                   <Pin />
                 </AdvancedMarker>
               )}
+              {route.status === "done" && (
+                <RouteLine encodedPolyline={route.route.encodedPolyline} />
+              )}
             </Map>
           </APIProvider>
           {state.showNotice && (
@@ -113,8 +120,12 @@ export function MapView({ apiKey }: Props) {
             <div className="pointer-events-auto w-full">
               <ConditionSheet
                 disabled={!start}
-                // ルートの生成は #6 で実装する。いまは目標距離を受け取るところまで
-                onGenerate={setRouteDistance}
+                loading={route.status === "loading"}
+                status={<RouteStatus state={route} onRetry={retry} />}
+                onGenerate={(meters) => {
+                  setRouteDistance(meters);
+                  if (start) void generate(start.position, meters);
+                }}
               />
             </div>
           </div>
@@ -128,6 +139,74 @@ export function MapView({ apiKey }: Props) {
       )}
     </div>
   );
+}
+
+// ルート全体を収めるときの余白（px）。下は条件のシートに隠れない分をあける
+const ROUTE_PADDING = { top: 64, right: 32, bottom: 320, left: 32 };
+
+/** 作ったルートを地図に線で描き、ルート全体が画面に収まるようにズームする */
+function RouteLine({ encodedPolyline }: { encodedPolyline: string }) {
+  const map = useMap();
+  const path = useMemo(
+    () => decodePolyline(encodedPolyline),
+    [encodedPolyline],
+  );
+  useEffect(() => {
+    if (!map || path.length === 0) return;
+    const line = new google.maps.Polyline({
+      path,
+      map,
+      strokeColor: "#16a34a",
+      strokeOpacity: 0.9,
+      strokeWeight: 6,
+    });
+    const bounds = new google.maps.LatLngBounds();
+    for (const point of path) bounds.extend(point);
+    map.fitBounds(bounds, ROUTE_PADDING);
+    return () => line.setMap(null);
+  }, [map, path]);
+  return null;
+}
+
+/** シートの上部に出す、ルートの距離・時間、またはエラーと再試行ボタン */
+function RouteStatus({
+  state,
+  onRetry,
+}: {
+  state: LoopRouteState;
+  onRetry: () => void;
+}) {
+  if (state.status === "done") {
+    return (
+      <p data-testid="route-summary" className="text-center text-sm">
+        ルート{" "}
+        <strong className="text-base">
+          {formatDistance(state.route.distanceMeters)}
+        </strong>
+        ・約
+        <strong className="text-base">
+          {formatDuration(state.route.durationSeconds)}
+        </strong>
+      </p>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <div className="flex items-center gap-3">
+        <p role="alert" className="flex-1 text-sm text-red-700">
+          ルートを作れませんでした
+        </p>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="min-h-11 rounded-lg border border-red-300 px-4 text-sm font-bold text-red-700 active:bg-red-50"
+        >
+          再試行
+        </button>
+      </div>
+    );
+  }
+  return null;
 }
 
 /** 中心を移す依頼が来るたびに、地図の中心を移す（ズームは変えない） */
