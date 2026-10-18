@@ -8,6 +8,9 @@ type RouteRequest = {
   rotation?: number;
 };
 
+/** 目標距離の上限（m）。遠い経由地で何度も API を呼んで料金がかさまないようにする */
+const MAX_METERS = 20_000;
+
 const isNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
@@ -19,7 +22,7 @@ function parseRequest(body: unknown): RouteRequest | null {
   const { lat, lng } = start as Record<string, unknown>;
   if (!isNumber(lat) || Math.abs(lat) > 90) return null;
   if (!isNumber(lng) || Math.abs(lng) > 180) return null;
-  if (!isNumber(meters) || meters <= 0) return null;
+  if (!isNumber(meters) || meters <= 0 || meters > MAX_METERS) return null;
   if (rotation !== undefined && !isNumber(rotation)) return null;
   return { start: { lat, lng }, meters, rotation };
 }

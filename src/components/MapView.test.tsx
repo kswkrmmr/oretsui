@@ -11,6 +11,7 @@ import { MapView } from "./MapView";
 // テストで本物の Google Maps を読み込まないよう、ライブラリをモックする
 const mocks = vi.hoisted(() => {
   const panTo = vi.fn();
+  const fitBounds = vi.fn();
   // 地図の div。幅 400・高さ 800 で画面の左上にあるものとする
   const div = document.createElement("div");
   div.getBoundingClientRect = () =>
@@ -29,10 +30,14 @@ const mocks = vi.hoisted(() => {
   return {
     mapProps: null as Record<string, unknown> | null,
     panTo,
+    fitBounds,
     div,
+    // 地図に描いたルートの線（google.maps.Polyline に渡した設定）
+    polylines: [] as { path: unknown; setMap: ReturnType<typeof vi.fn> }[],
     // 本物と同じく、同じ地図には同じオブジェクトを返す。中心は北緯30度・東経100度、ズーム0
     map: {
       panTo,
+      fitBounds,
       getDiv: () => div,
       getProjection: () => projection,
       getCenter: () => ({ lat: () => 30, lng: () => 100 }),
@@ -92,12 +97,43 @@ function mapEvent(name: "onClick" | "onContextmenu", position = TAPPED) {
 }
 
 const container = () => screen.getByTestId("map");
+
+const fetchMock = vi.fn<typeof fetch>();
+// Google のドキュメントにある例。3点のポリライン
+const POLYLINE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@";
+
+function routeResponse(status = 200) {
+  return Response.json(
+    status === 200
+      ? {
+          distanceMeters: 2134,
+          durationSeconds: 1620,
+          encodedPolyline: POLYLINE,
+          waypoints: [],
+          withinTolerance: true,
+        }
+      : { error: "ルート検索に失敗しました" },
+    { status },
+  );
+}
+
+async function generateRoute() {
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "ルートを作る" }));
+  });
+}
 const NOTICE = "位置情報が使えません。地図をタップして出発点を選んでください";
 
 describe("MapView", () => {
   beforeEach(() => {
     mocks.mapProps = null;
     mocks.panTo.mockClear();
+    mocks.fitBounds.mockClear();
+    mocks.polylines = [];
+    // ルート検索 API は、テストごとに返事を決める。決めなければ返事をしない
+    fetchMock.mockReset();
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
     geo.getCurrentPosition.mockReset();
     vi.stubGlobal("navigator", {
       ...navigator,
@@ -111,6 +147,18 @@ describe("MapView", () => {
             public x: number,
             public y: number,
           ) {}
+        },
+        Polyline: class {
+          setMap = vi.fn();
+          constructor({ path }: { path: unknown }) {
+            mocks.polylines.push({ path, setMap: this.setMap });
+          }
+        },
+        LatLngBounds: class {
+          points: unknown[] = [];
+          extend(point: unknown) {
+            this.points.push(point);
+          }
         },
       },
     });
@@ -247,6 +295,67 @@ describe("MapView", () => {
     expect(container()).not.toHaveAttribute("data-route-distance");
     fireEvent.click(screen.getByRole("button", { name: "ルートを作る" }));
     expect(container()).toHaveAttribute("data-route-distance", "2400");
+  });
+
+  it("ルートを作ると、出発点と目標距離で API を呼び、線を描いて全体が収まるようにズームする", async () => {
+    fetchMock.mockResolvedValue(routeResponse());
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+
+    const [url, init] = fetchMock.mock.lastCall!;
+    expect(url).toBe("/api/route");
+    expect(JSON.parse(init!.body as string)).toEqual({
+      start: HERE,
+      meters: 2400,
+    });
+    expect(mocks.polylines).toHaveLength(1);
+    expect(mocks.polylines[0].path).toHaveLength(3);
+    expect(mocks.fitBounds).toHaveBeenCalledTimes(1);
+    expect(mocks.fitBounds.mock.lastCall![0].points).toHaveLength(3);
+    expect(screen.getByTestId("route-summary")).toHaveTextContent(
+      "ルート 2.1 km・約27分",
+    );
+  });
+
+  it("作り直すと、前のルートの線を消す", async () => {
+    fetchMock.mockImplementation(async () => routeResponse());
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    await generateRoute();
+    expect(mocks.polylines[0].setMap).toHaveBeenCalledWith(null);
+  });
+
+  it("生成に失敗するとエラーと再試行ボタンを出し、再試行で同じ条件で作り直す", async () => {
+    fetchMock.mockResolvedValueOnce(routeResponse(502));
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "ルートを作れませんでした",
+    );
+    expect(mocks.polylines).toHaveLength(0);
+
+    fetchMock.mockResolvedValueOnce(routeResponse());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "再試行" }));
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1]!.body).toBe(
+      fetchMock.mock.calls[0][1]!.body,
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("route-summary")).toBeInTheDocument();
+  });
+
+  it("作成中は「ルートを作る」を押せない", async () => {
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    expect(
+      screen.getByRole("button", { name: "ルートを作成中…" }),
+    ).toBeDisabled();
   });
 
   // iOS は長押しで contextmenu を出さないため、指の押し続けを自前で判定する

@@ -103,11 +103,18 @@ describe("POST /api/route", () => {
     ["緯度が範囲外", { start: { lat: 91, lng: 139 }, meters: 2000 }],
     ["経度が数でない", { start: { lat: 35, lng: "139" }, meters: 2000 }],
     ["距離が0以下", { start: START, meters: 0 }],
+    ["距離が 20km を超える", { start: START, meters: 20001 }],
     ["回転角が数でない", { start: START, meters: 2000, rotation: "north" }],
   ])("入力が不正（%s）なら 400 を返し、API を呼ばない", async (_, body) => {
     const response = await post(body);
     expect(response.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("距離はちょうど 20km までなら受け付ける", async () => {
+    fetchMock.mockResolvedValue(routesResponse(20000));
+    const response = await post({ start: START, meters: 20000 });
+    expect(response.status).toBe(200);
   });
 
   it("サーバー用のキーが未設定なら 500 を返す", async () => {
