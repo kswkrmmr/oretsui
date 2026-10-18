@@ -43,10 +43,15 @@ test("ルートを作ると、生成中の表示のあとに距離と時間が�
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
 
-  expect(await requested).toEqual({
+  // 回転角（#8）はブラウザがランダムに決めて渡す
+  const body = await requested;
+  expect(body).toEqual({
     start: { lat: 35.6895, lng: 139.6917 },
     meters: 2400,
+    rotation: expect.any(Number),
   });
+  expect(body.rotation).toBeGreaterThanOrEqual(0);
+  expect(body.rotation).toBeLessThan(360);
   await expect(
     page.getByRole("button", { name: "ルートを作成中…" }),
   ).toBeDisabled();
@@ -85,4 +90,39 @@ test("生成に失敗するとエラーと再試行ボタンが出て、再試�
   await retry.click();
   await expect(page.getByTestId("route-summary")).toContainText("2.1 km");
   await expect(sheet.getByRole("alert")).toHaveCount(0);
+});
+
+test("「別のルート」を押すと、回転角を 90〜270° ずらして作り直し、ルートが変わる", async ({
+  page,
+}) => {
+  // 1回目と2回目で違うルートを返し、頼まれた回転角を記録する
+  const rotations: number[] = [];
+  const routes = [
+    ROUTE,
+    { ...ROUTE, distanceMeters: 2456, encodedPolyline: "_ibE_seK_seK_seK" },
+  ];
+  await page.route("**/api/route", (route) => {
+    rotations.push(route.request().postDataJSON().rotation);
+    return route.fulfill({ json: routes[rotations.length - 1] });
+  });
+
+  await page.goto("/");
+  await expect(mapContainer(page)).toHaveAttribute(
+    "data-start-source",
+    "current",
+  );
+  await page.getByRole("button", { name: "ルートを作る" }).click();
+  const summary = page.getByTestId("route-summary");
+  await expect(summary).toContainText("2.1 km");
+
+  const another = page.getByRole("button", { name: "別のルート" });
+  const box = await another.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await another.click();
+
+  await expect(summary).toContainText("2.5 km");
+  expect(rotations).toHaveLength(2);
+  const shift = (rotations[1] - rotations[0] + 360) % 360;
+  expect(shift).toBeGreaterThanOrEqual(90);
+  expect(shift).toBeLessThanOrEqual(270);
 });

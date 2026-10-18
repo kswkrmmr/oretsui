@@ -9,15 +9,19 @@ export type LoopRouteResponse = {
   withinTolerance: boolean;
 };
 
-/** 出発点に戻ってくる、目標距離に近いルートをサーバーに頼む。失敗したら例外を投げる */
+/**
+ * 出発点に戻ってくる、目標距離に近いルートをサーバーに頼む。失敗したら例外を投げる。
+ * rotation は円の向き（度）。変えると違うルートになる
+ */
 export async function requestLoopRoute(
   start: LatLng,
   meters: number,
+  rotation: number,
 ): Promise<LoopRouteResponse> {
   const response = await fetch("/api/route", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start, meters }),
+    body: JSON.stringify({ start, meters, rotation }),
   });
   if (!response.ok) {
     throw new Error(`ルート検索に失敗しました（${response.status}）`);

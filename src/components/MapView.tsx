@@ -32,7 +32,7 @@ export function MapView({ apiKey }: Props) {
   const { state, tap, longPress, recenter } = useStartPoint();
   const { start } = state;
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
-  const { state: route, generate, retry } = useLoopRoute();
+  const { state: route, generate, retry, another } = useLoopRoute();
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -121,7 +121,13 @@ export function MapView({ apiKey }: Props) {
               <ConditionSheet
                 disabled={!start}
                 loading={route.status === "loading"}
-                status={<RouteStatus state={route} onRetry={retry} />}
+                status={
+                  <RouteStatus
+                    state={route}
+                    onRetry={retry}
+                    onAnother={another}
+                  />
+                }
                 onGenerate={(meters) => {
                   setRouteDistance(meters);
                   if (start) void generate(start.position, meters);
@@ -168,26 +174,37 @@ function RouteLine({ encodedPolyline }: { encodedPolyline: string }) {
   return null;
 }
 
-/** シートの上部に出す、ルートの距離・時間、またはエラーと再試行ボタン */
+/** シートの上部に出す、ルートの距離・時間と「別のルート」、またはエラーと再試行ボタン */
 function RouteStatus({
   state,
   onRetry,
+  onAnother,
 }: {
   state: LoopRouteState;
   onRetry: () => void;
+  onAnother: () => void;
 }) {
   if (state.status === "done") {
     return (
-      <p data-testid="route-summary" className="text-center text-sm">
-        ルート{" "}
-        <strong className="text-base">
-          {formatDistance(state.route.distanceMeters)}
-        </strong>
-        ・約
-        <strong className="text-base">
-          {formatDuration(state.route.durationSeconds)}
-        </strong>
-      </p>
+      <div className="flex items-center gap-3">
+        <p data-testid="route-summary" className="flex-1 text-sm">
+          ルート{" "}
+          <strong className="text-base">
+            {formatDistance(state.route.distanceMeters)}
+          </strong>
+          ・約
+          <strong className="text-base">
+            {formatDuration(state.route.durationSeconds)}
+          </strong>
+        </p>
+        <button
+          type="button"
+          onClick={onAnother}
+          className="min-h-11 rounded-lg border border-green-600 px-4 text-sm font-bold text-green-700 active:bg-green-50"
+        >
+          別のルート
+        </button>
+      </div>
     );
   }
   if (state.status === "error") {

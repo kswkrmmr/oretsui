@@ -168,6 +168,7 @@ describe("MapView", () => {
     cleanup();
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("APIキーが空のとき、エラーメッセージを表示し地図は描画しない", () => {
@@ -298,6 +299,7 @@ describe("MapView", () => {
   });
 
   it("ルートを作ると、出発点と目標距離で API を呼び、線を描いて全体が収まるようにズームする", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     fetchMock.mockResolvedValue(routeResponse());
     render(<MapView apiKey="test-key" />);
     succeed();
@@ -305,9 +307,11 @@ describe("MapView", () => {
 
     const [url, init] = fetchMock.mock.lastCall!;
     expect(url).toBe("/api/route");
+    // Math.random を 0.5 に固定しているので、回転角は 180°
     expect(JSON.parse(init!.body as string)).toEqual({
       start: HERE,
       meters: 2400,
+      rotation: 180,
     });
     expect(mocks.polylines).toHaveLength(1);
     expect(mocks.polylines[0].path).toHaveLength(3);
@@ -347,6 +351,41 @@ describe("MapView", () => {
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByTestId("route-summary")).toBeInTheDocument();
+  });
+
+  it("「別のルート」を押すと、同じ条件で回転角を 90〜270° ずらして作り直す", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    fetchMock.mockImplementation(async () => routeResponse());
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "別のルート" }));
+    });
+
+    const [first, second] = fetchMock.mock.calls.map(([, init]) =>
+      JSON.parse(init!.body as string),
+    );
+    // 乱数 0 なので、1回目は 0°、2回目は 0° から 90° ずらす
+    expect(first).toEqual({ start: HERE, meters: 2400, rotation: 0 });
+    expect(second).toEqual({ start: HERE, meters: 2400, rotation: 90 });
+    expect(screen.getByTestId("route-summary")).toBeInTheDocument();
+  });
+
+  it("再試行は、失敗したときと同じ回転角で作り直す", async () => {
+    vi.spyOn(Math, "random").mockReturnValueOnce(0.25).mockReturnValue(0.75);
+    fetchMock.mockResolvedValueOnce(routeResponse(502));
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    fetchMock.mockResolvedValueOnce(routeResponse());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "再試行" }));
+    });
+    const rotations = fetchMock.mock.calls.map(
+      ([, init]) => JSON.parse(init!.body as string).rotation,
+    );
+    expect(rotations).toEqual([90, 90]);
   });
 
   it("作成中は「ルートを作る」を押せない", async () => {
