@@ -327,7 +327,9 @@ describe("MapView", () => {
     render(<MapView apiKey="test-key" />);
     succeed();
     await generateRoute();
-    await generateRoute();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "別のルート" }));
+    });
     expect(mocks.polylines[0].setMap).toHaveBeenCalledWith(null);
   });
 
@@ -388,13 +390,47 @@ describe("MapView", () => {
     expect(rotations).toEqual([90, 90]);
   });
 
-  it("作成中は「ルートを作る」を押せない", async () => {
+  it("作成中は条件とボタンを隠し、「ルートを作成中…」だけを出す", async () => {
     render(<MapView apiKey="test-key" />);
     succeed();
     await generateRoute();
+    expect(screen.getByRole("status")).toHaveTextContent("ルートを作成中…");
+    expect(screen.queryByRole("button", { name: "ルートを作る" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "別のルート" })).toBeNull();
+  });
+
+  it("ルートを作ったら条件を隠し、「条件を変える」で選んでいた条件に戻る", async () => {
+    fetchMock.mockImplementation(async () => routeResponse());
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    fireEvent.click(screen.getByRole("button", { name: "60分" }));
+    await generateRoute();
+
+    expect(screen.queryByRole("button", { name: "ルートを作る" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "60分" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "ルートを作成中…" }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: "別のルート" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "条件を変える" }));
+    expect(screen.getByRole("button", { name: "60分" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "ルートを作る" })).toBeEnabled();
+    // 条件を選び直しているあいだは、前のルートの距離だけを出す
+    expect(screen.getByTestId("route-summary")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "別のルート" })).toBeNull();
+    expect(mocks.polylines[0].setMap).not.toHaveBeenCalled();
+  });
+
+  it("生成に失敗したときは、条件も見えるままにする", async () => {
+    fetchMock.mockResolvedValueOnce(routeResponse(502));
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    expect(screen.getByRole("button", { name: "ルートを作る" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "再試行" })).toBeInTheDocument();
   });
 
   // iOS は長押しで contextmenu を出さないため、指の押し続けを自前で判定する

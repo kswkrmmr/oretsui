@@ -10,6 +10,18 @@ test.beforeEach(async ({ page, context }) => {
   // 出発点がないと「ルートを作る」を押せないので、現在地を出発点にする
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 35.6895, longitude: 139.6917 });
+  // 本物の Routes API を呼ばないよう、ルート検索 API の返事を決めておく
+  await page.route("**/api/route", (route) =>
+    route.fulfill({
+      json: {
+        distanceMeters: 2134,
+        durationSeconds: 1620,
+        encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+        waypoints: [],
+        withinTolerance: true,
+      },
+    }),
+  );
 });
 
 test("条件を選んで「ルートを作る」を押すと、生成処理が呼ばれる", async ({
@@ -29,6 +41,8 @@ test("条件を選んで「ルートを作る」を押すと、生成処理が�
     "3600",
   );
 
+  // ルートを作ると条件が隠れるので、「条件を変える」で戻してから選び直す
+  await page.getByRole("button", { name: "条件を変える" }).click();
   await page.getByRole("button", { name: "距離" }).click();
   await page.getByRole("button", { name: "5km" }).click();
   await page.getByRole("button", { name: "ルートを作る" }).click();

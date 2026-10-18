@@ -52,14 +52,20 @@ test("ルートを作ると、生成中の表示のあとに距離と時間が�
   });
   expect(body.rotation).toBeGreaterThanOrEqual(0);
   expect(body.rotation).toBeLessThan(360);
-  await expect(
-    page.getByRole("button", { name: "ルートを作成中…" }),
-  ).toBeDisabled();
+  // 作成中は条件と「ルートを作る」を隠し、作成中の表示だけを出す
+  const sheet = page.getByRole("region", { name: "散歩の条件" });
+  await expect(sheet.getByRole("status")).toHaveText("ルートを作成中…");
+  await expect(page.getByRole("button", { name: "ルートを作る" })).toHaveCount(
+    0,
+  );
 
   respond();
   const summary = page.getByTestId("route-summary");
   await expect(summary).toContainText("2.1 km");
   await expect(summary).toContainText("27分");
+  // 作ったあとは「別のルート」と「条件を変える」で操作する
+  await expect(page.getByRole("button", { name: "別のルート" })).toBeVisible();
+  await page.getByRole("button", { name: "条件を変える" }).click();
   await expect(
     page.getByRole("button", { name: "ルートを作る" }),
   ).toBeEnabled();
