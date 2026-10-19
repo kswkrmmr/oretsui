@@ -32,7 +32,11 @@ export function MapView({ apiKey }: Props) {
   const { state, tap, longPress, recenter } = useStartPoint();
   const { start } = state;
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
-  const { state: route, generate, retry } = useLoopRoute();
+  const { state: route, generate, retry, another } = useLoopRoute();
+  // ルートを作ったら条件を隠し、「条件を変える」で戻す。失敗したときは条件も見せる
+  const [showConditions, setShowConditions] = useState(true);
+  const collapsed =
+    !showConditions && (route.status === "loading" || route.status === "done");
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -120,10 +124,22 @@ export function MapView({ apiKey }: Props) {
             <div className="pointer-events-auto w-full">
               <ConditionSheet
                 disabled={!start}
-                loading={route.status === "loading"}
-                status={<RouteStatus state={route} onRetry={retry} />}
+                collapsed={collapsed}
+                status={
+                  <RouteStatus
+                    state={route}
+                    collapsed={collapsed}
+                    onRetry={() => {
+                      setShowConditions(false);
+                      retry();
+                    }}
+                    onAnother={another}
+                    onEditConditions={() => setShowConditions(true)}
+                  />
+                }
                 onGenerate={(meters) => {
                   setRouteDistance(meters);
+                  setShowConditions(false);
                   if (start) void generate(start.position, meters);
                 }}
               />
@@ -168,16 +184,32 @@ function RouteLine({ encodedPolyline }: { encodedPolyline: string }) {
   return null;
 }
 
-/** シートの上部に出す、ルートの距離・時間、またはエラーと再試行ボタン */
+/**
+ * シートの上部に出す、ルートの状態。条件を隠しているときは「別のルート」と「条件を変える」も出す。
+ * 失敗したときはエラーと再試行ボタン
+ */
 function RouteStatus({
   state,
+  collapsed,
   onRetry,
+  onAnother,
+  onEditConditions,
 }: {
   state: LoopRouteState;
+  collapsed: boolean;
   onRetry: () => void;
+  onAnother: () => void;
+  onEditConditions: () => void;
 }) {
-  if (state.status === "done") {
+  if (state.status === "loading" && collapsed) {
     return (
+      <p role="status" className="py-3 text-center text-sm">
+        ルートを作成中…
+      </p>
+    );
+  }
+  if (state.status === "done") {
+    const summary = (
       <p data-testid="route-summary" className="text-center text-sm">
         ルート{" "}
         <strong className="text-base">
@@ -188,6 +220,28 @@ function RouteStatus({
           {formatDuration(state.route.durationSeconds)}
         </strong>
       </p>
+    );
+    if (!collapsed) return summary;
+    return (
+      <>
+        {summary}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onEditConditions}
+            className="min-h-12 flex-1 rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
+          >
+            条件を変える
+          </button>
+          <button
+            type="button"
+            onClick={onAnother}
+            className="min-h-12 flex-1 rounded-xl bg-green-600 font-bold text-white active:bg-green-700"
+          >
+            別のルート
+          </button>
+        </div>
+      </>
     );
   }
   if (state.status === "error") {
