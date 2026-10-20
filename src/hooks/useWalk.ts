@@ -2,11 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LatLng } from "@/lib/start-point";
-import { cumulativeDistances, walkedDistance } from "@/lib/walk-progress";
+import {
+  countOffRoute,
+  cumulativeDistances,
+  distanceToRoute,
+  walkedDistance,
+} from "@/lib/walk-progress";
 
 export type WalkState =
   | { status: "idle" }
-  | { status: "walking"; position: LatLng | null; walked: number }
+  | {
+      status: "walking";
+      position: LatLng | null;
+      walked: number;
+      /** ルートから外れた位置が続けて届いた回数（#36） */
+      offRouteCount: number;
+    }
   | { status: "unavailable" };
 
 /** 散歩中に現在地を追いかけるときの設定。古い位置は使わない */
@@ -35,7 +46,12 @@ export function useWalk(path: LatLng[]) {
       setState({ status: "unavailable" });
       return;
     }
-    setState({ status: "walking", position: null, walked: 0 });
+    setState({
+      status: "walking",
+      position: null,
+      walked: 0,
+      offRouteCount: 0,
+    });
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const position = { lat: coords.latitude, lng: coords.longitude };
@@ -45,6 +61,10 @@ export function useWalk(path: LatLng[]) {
                 status: "walking",
                 position,
                 walked: walkedDistance(path, position, previous.walked),
+                offRouteCount: countOffRoute(
+                  previous.offRouteCount,
+                  distanceToRoute(path, position),
+                ),
               }
             : previous,
         );
