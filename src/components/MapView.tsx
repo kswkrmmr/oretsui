@@ -9,6 +9,7 @@ import {
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
 import { useEffect, useMemo, useState } from "react";
+import { Aniki } from "@/components/Aniki";
 import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
 import { useStartPoint } from "@/hooks/useStartPoint";
@@ -21,6 +22,7 @@ import {
   pixelToWorldPoint,
   type Point,
 } from "@/lib/long-press";
+import { ANIKI_LINES, anikiScene } from "@/lib/aniki";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
 import { isOffRoute } from "@/lib/walk-progress";
@@ -55,6 +57,13 @@ export function MapView({ apiKey }: Props) {
   const walkPosition =
     walk.state.status === "walking" ? walk.state.position : null;
   const currentDot = walking ? walkPosition : state.current;
+  // 兄貴の一言（#41）。「別のルート」で作ったかどうかで言い方を変える
+  const [anotherRoute, setAnotherRoute] = useState(false);
+  const scene = anikiScene({
+    hasStart: start !== null,
+    routeStatus: route.status,
+    another: anotherRoute,
+  });
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -119,26 +128,35 @@ export function MapView({ apiKey }: Props) {
               位置情報が使えません。地図をタップして出発点を選んでください
             </p>
           )}
-          {/* 片手で届く画面下部に、条件のシートと、そのすぐ上に「現在地に戻る」を置く */}
+          {/* 片手で届く画面下部に、条件のシートと、そのすぐ上に兄貴の一言と「現在地に戻る」を置く */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-end gap-3">
-            <button
-              type="button"
-              aria-label="現在地に戻る"
-              onClick={walking ? () => setFollowing(true) : recenter}
-              className="pointer-events-auto mr-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-neutral-100"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-6 w-6"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
+            <div className="flex w-full items-end gap-3 px-4">
+              {scene ? (
+                <div className="pointer-events-auto flex min-w-0 flex-1">
+                  <Aniki line={ANIKI_LINES[scene]} />
+                </div>
+              ) : (
+                <div className="flex-1" />
+              )}
+              <button
+                type="button"
+                aria-label="現在地に戻る"
+                onClick={walking ? () => setFollowing(true) : recenter}
+                className="pointer-events-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-neutral-100"
               >
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-              </svg>
-            </button>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-6 w-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <circle cx="12" cy="12" r="4" />
+                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+                </svg>
+              </button>
+            </div>
             <div className="pointer-events-auto w-full">
               <ConditionSheet
                 disabled={!start}
@@ -158,11 +176,15 @@ export function MapView({ apiKey }: Props) {
                       setShowConditions(false);
                       retry();
                     }}
-                    onAnother={another}
+                    onAnother={() => {
+                      setAnotherRoute(true);
+                      another();
+                    }}
                     onEditConditions={() => setShowConditions(true)}
                   />
                 }
                 onGenerate={(meters) => {
+                  setAnotherRoute(false);
                   setRouteDistance(meters);
                   setShowConditions(false);
                   if (start) void generate(start.position, meters);

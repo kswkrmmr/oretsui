@@ -1,0 +1,122 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+
+// 外側（DOM 上で先に出てくる）コンテナを明示的に指定する
+const mapContainer = (page: Page) => page.getByTestId("map").first();
+
+const ROUTE = {
+  distanceMeters: 2134,
+  durationSeconds: 1620,
+  encodedPolyline: "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+  waypoints: [],
+  withinTolerance: true,
+};
+
+test.beforeEach(async ({ page, context }) => {
+  // テストで本物の Google Maps を読み込まない
+  await page.route(/maps\.googleapis\.com/, (route) => route.abort());
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 35.6895, longitude: 139.6917 });
+});
+
+test("出発点が決まる → ルートを作る → できる → 別のルート → 失敗、の順に兄貴のセリフが入れ替わる", async ({
+  page,
+}) => {
+  // 返事を1回ずつ手で返す。1回目は成功、2回目は別のルートで成功、3回目は失敗
+  const pending: Route[] = [];
+  await page.route("**/api/route", (route) => {
+    pending.push(route);
+  });
+  const respond = async (fulfill: (route: Route) => Promise<void>) => {
+    await expect.poll(() => pending.length).toBeGreaterThan(0);
+    await fulfill(pending.shift()!);
+  };
+  const ok = (route: Route) => route.fulfill({ json: ROUTE });
+  const fail = (route: Route) =>
+    route.fulfill({ status: 502, json: { error: "ルート検索に失敗しました" } });
+
+  await page.goto("/");
+  const line = page.getByTestId("aniki-line");
+  await expect(mapContainer(page)).toHaveAttribute(
+    "data-start-source",
+    "current",
+  );
+  await expect(line).toHaveText(
+    "今日はどれくらい歩く？決めてくれたら、道は俺に任せな",
+  );
+  await expect(page.getByRole("img", { name: "兄貴" })).toBeVisible();
+
+  await page.getByRole("button", { name: "ルートを作る" }).click();
+  await expect(line).toHaveText("いい道を探してくる。ちょっと待ってな");
+  await respond(ok);
+  await expect(line).toHaveText("いい道を見つけたぞ。俺についてこい！");
+
+  await page.getByRole("button", { name: "別のルート" }).click();
+  await expect(line).toHaveText("いい道を探してくる。ちょっと待ってな");
+  await respond(ok);
+  await expect(line).toHaveText("じゃあ、こっちの道はどうだ？");
+
+  await page.getByRole("button", { name: "別のルート" }).click();
+  await respond(fail);
+  await expect(line).toHaveText(
+    "すまん、道が見つからなかった。もう一回いいか？",
+  );
+  // 今ある表示はそのまま残る
+  await expect(
+    page.getByRole("region", { name: "散歩の条件" }).getByRole("alert"),
+  ).toContainText("ルートを作れませんでした");
+});
+
+test("出発点が決まるまでは兄貴を出さない", async ({ page, context }) => {
+  await context.clearPermissions();
+  await page.goto("/");
+  await expect(page.getByRole("status")).toContainText("位置情報が使えません");
+  await expect(page.getByTestId("aniki-line")).toHaveCount(0);
+});
+
+/** 2つの箱が重なっているか */
+function overlaps(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
+
+test("兄貴の吹き出しは「現在地に戻る」ボタンや条件のシートと重ならない", async ({
+  page,
+}) => {
+  await page.route("**/api/route", (route) => route.fulfill({ json: ROUTE }));
+  await page.goto("/");
+  await expect(mapContainer(page)).toHaveAttribute(
+    "data-start-source",
+    "current",
+  );
+  const check = async () => {
+    const bubble = await page.getByTestId("aniki-line").boundingBox();
+    const face = await page.getByRole("img", { name: "兄貴" }).boundingBox();
+    const recenter = await page
+      .getByRole("button", { name: "現在地に戻る" })
+      .boundingBox();
+    const sheet = await page
+      .getByRole("region", { name: "散歩の条件" })
+      .boundingBox();
+    for (const box of [bubble!, face!]) {
+      expect(overlaps(box, recenter!)).toBe(false);
+      expect(overlaps(box, sheet!)).toBe(false);
+      // 画面の横からはみ出さない
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    }
+  };
+  // 条件を出しているときと、ルートを作って条件を隠したときの両方
+  await check();
+  await page.getByRole("button", { name: "ルートを作る" }).click();
+  await expect(page.getByTestId("aniki-line")).toHaveText(
+    "いい道を見つけたぞ。俺についてこい！",
+  );
+  await check();
+});
