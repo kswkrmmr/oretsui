@@ -132,3 +132,36 @@ test("「別のルート」を押すと、回転角を 90〜270° ずらして�
   expect(shift).toBeGreaterThanOrEqual(90);
   expect(shift).toBeLessThanOrEqual(270);
 });
+
+test("「出発」を押すと、位置を動かすたびに歩いた距離と残りの距離が更新される", async ({
+  page,
+  context,
+}) => {
+  // 出発点から北へ約445m、東へ約452m、出発点へ戻る三角形（全長 約1.5km）
+  await page.route("**/api/route", (route) =>
+    route.fulfill({
+      json: { ...ROUTE, encodedPolyline: "kryxEcprsY_X??g^~Wf^" },
+    }),
+  );
+  await page.goto("/");
+  await expect(mapContainer(page)).toHaveAttribute(
+    "data-start-source",
+    "current",
+  );
+  await page.getByRole("button", { name: "ルートを作る" }).click();
+  const start = page.getByRole("button", { name: "出発" });
+  const box = await start.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+  await start.click();
+
+  const progress = page.getByTestId("walk-progress");
+  await expect(progress).toHaveText("歩いた 0 m / 残り 1.5 km");
+  await context.setGeolocation({ latitude: 35.6915, longitude: 139.6917 });
+  await expect(progress).toHaveText("歩いた 222 m / 残り 1.3 km");
+  await context.setGeolocation({ latitude: 35.6935, longitude: 139.6917 });
+  await expect(progress).toHaveText("歩いた 445 m / 残り 1.1 km");
+
+  await page.getByRole("button", { name: "終了" }).click();
+  await expect(progress).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "別のルート" })).toBeVisible();
+});

@@ -75,7 +75,22 @@ const geo = {
     >(),
   lastSuccess: () => geo.getCurrentPosition.mock.lastCall![0],
   lastFailure: () => geo.getCurrentPosition.mock.lastCall![1],
+  // 散歩中モード（#9）で現在地を追いかける
+  watchPosition:
+    vi.fn<
+      (success: Success, failure: Failure, options?: PositionOptions) => number
+    >(),
+  clearWatch: vi.fn<(id: number) => void>(),
 };
+
+/** 散歩中、現在地が動いたことにする */
+function move(position: { lat: number; lng: number }) {
+  act(() =>
+    geo.watchPosition.mock.lastCall![0]({
+      coords: { latitude: position.lat, longitude: position.lng },
+    } as GeolocationPosition),
+  );
+}
 
 function succeed(position = HERE) {
   act(() =>
@@ -102,13 +117,16 @@ const fetchMock = vi.fn<typeof fetch>();
 // Google のドキュメントにある例。3点のポリライン
 const POLYLINE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@";
 
-function routeResponse(status = 200) {
+// 出発点から北へ約445m、東へ約452m、出発点へ戻る三角形（全長 約1.5km）
+const LOOP_POLYLINE = "kryxEcprsY_X??g^~Wf^";
+
+function routeResponse(status = 200, encodedPolyline = POLYLINE) {
   return Response.json(
     status === 200
       ? {
           distanceMeters: 2134,
           durationSeconds: 1620,
-          encodedPolyline: POLYLINE,
+          encodedPolyline,
           waypoints: [],
           withinTolerance: true,
         }
@@ -135,9 +153,15 @@ describe("MapView", () => {
     fetchMock.mockReturnValue(new Promise(() => {}));
     vi.stubGlobal("fetch", fetchMock);
     geo.getCurrentPosition.mockReset();
+    geo.watchPosition.mockReset().mockReturnValue(7);
+    geo.clearWatch.mockReset();
     vi.stubGlobal("navigator", {
       ...navigator,
-      geolocation: { getCurrentPosition: geo.getCurrentPosition },
+      geolocation: {
+        getCurrentPosition: geo.getCurrentPosition,
+        watchPosition: geo.watchPosition,
+        clearWatch: geo.clearWatch,
+      },
     });
     // 本物の Google Maps を読み込まないので、座標の入れ物だけ用意する
     vi.stubGlobal("google", {
@@ -495,6 +519,85 @@ describe("MapView", () => {
       });
       wait(500);
       expect(container()).toHaveAttribute("data-start-source", "current");
+    });
+  });
+  describe("散歩中モード", () => {
+    async function startWalk() {
+      fetchMock.mockImplementation(async () =>
+        routeResponse(200, LOOP_POLYLINE),
+      );
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      await generateRoute();
+      fireEvent.click(screen.getByRole("button", { name: "出発" }));
+    }
+
+    it("「出発」を押すと現在地を追いかけ、動くたびに歩いた距離と残りの距離を更新する", async () => {
+      await startWalk();
+      expect(geo.watchPosition).toHaveBeenCalledTimes(1);
+      // 散歩中は「別のルート」と「条件を変える」を隠す
+      expect(screen.queryByRole("button", { name: "別のルート" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "条件を変える" })).toBeNull();
+
+      move(HERE);
+      const progress = () => screen.getByTestId("walk-progress");
+      expect(progress()).toHaveTextContent("歩いた 0 m / 残り 1.5 km");
+      move({ lat: 35.6915, lng: 139.6917 });
+      expect(progress()).toHaveTextContent("歩いた 222 m / 残り 1.3 km");
+      move({ lat: 35.6935, lng: 139.6917 });
+      expect(progress()).toHaveTextContent("歩いた 445 m / 残り 1.1 km");
+    });
+
+    it("散歩中は地図を現在地に追従させ、指で動かしたらやめ、「現在地に戻る」で再開する", async () => {
+      await startWalk();
+      mocks.panTo.mockClear();
+      const next = { lat: 35.6915, lng: 139.6917 };
+      move(next);
+      expect(mocks.panTo).toHaveBeenLastCalledWith(next);
+
+      act(() => (mocks.mapProps!.onDragstart as () => void)());
+      mocks.panTo.mockClear();
+      move({ lat: 35.6935, lng: 139.6917 });
+      expect(mocks.panTo).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "現在地に戻る" }));
+      expect(mocks.panTo).toHaveBeenLastCalledWith({
+        lat: 35.6935,
+        lng: 139.6917,
+      });
+    });
+
+    it("「終了」を押すと追いかけるのをやめ、ルートを作った直後の画面に戻る", async () => {
+      await startWalk();
+      fireEvent.click(screen.getByRole("button", { name: "終了" }));
+      expect(geo.clearWatch).toHaveBeenCalledWith(7);
+      expect(screen.queryByTestId("walk-progress")).toBeNull();
+      expect(screen.getByTestId("route-summary")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "出発" })).toBeInTheDocument();
+    });
+
+    it("位置情報の許可がないときは「現在地を取得できません」を出す。一時的な失敗では止めない", async () => {
+      await startWalk();
+      const failWatch = (code: 1 | 2 | 3) =>
+        act(() =>
+          geo.watchPosition.mock.lastCall![1]({
+            code,
+            message: "",
+            PERMISSION_DENIED: 1,
+          } as GeolocationPositionError),
+        );
+      // 取得不能（2）・タイムアウト（3）は、次の位置を待つ
+      failWatch(2);
+      failWatch(3);
+      expect(screen.queryByRole("alert")).toBeNull();
+      move(HERE);
+      expect(screen.getByTestId("walk-progress")).toBeInTheDocument();
+
+      failWatch(1);
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "現在地を取得できません",
+      );
+      expect(screen.getByRole("button", { name: "終了" })).toBeInTheDocument();
     });
   });
 });
