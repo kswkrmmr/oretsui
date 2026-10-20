@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
 import { useStartPoint } from "@/hooks/useStartPoint";
+import { useWakeLock } from "@/hooks/useWakeLock";
 import { useWalk, type WalkState } from "@/hooks/useWalk";
 import { formatDistance, formatDuration } from "@/lib/format";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/lib/long-press";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
+import { isOffRoute } from "@/lib/walk-progress";
 import type { LatLng, StartPointState } from "@/lib/start-point";
 
 type Props = {
@@ -46,6 +48,8 @@ export function MapView({ apiKey }: Props) {
   );
   const walk = useWalk(path);
   const walking = walk.state.status !== "idle";
+  // 散歩中は画面をスリープさせない（#36）
+  useWakeLock(walking);
   // 散歩中は地図を現在地に追従させる。指で地図を動かしたらやめ、「現在地に戻る」で再開する
   const [following, setFollowing] = useState(true);
   const walkPosition =
@@ -229,6 +233,14 @@ function RouteStatus({
   if (walk.status !== "idle") {
     return (
       <>
+        {walk.status === "walking" && isOffRoute(walk.offRouteCount) && (
+          <p
+            role="alert"
+            className="rounded-lg bg-amber-100 py-2 text-center text-sm font-bold text-amber-900"
+          >
+            ルートから外れています
+          </p>
+        )}
         {walk.status === "walking" ? (
           <p data-testid="walk-progress" className="text-center text-sm">
             歩いた{" "}

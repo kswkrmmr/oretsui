@@ -66,3 +66,38 @@ export function walkedDistance(
   }
   return best;
 }
+
+/** ルートからこの距離（m）以上離れたら、外れているとみなす */
+export const OFF_ROUTE_M = 50;
+
+/** 外れた位置がこの回数続けて届いたら知らせる。GPS の一時的なずれで知らせないため */
+export const OFF_ROUTE_COUNT = 2;
+
+/** 現在地からルートの線までの最短距離（m） */
+export function distanceToRoute(path: LatLng[], position: LatLng): number {
+  if (path.length === 1) return distanceBetween(path[0], position);
+  let nearest = Infinity;
+  for (let i = 1; i < path.length; i++) {
+    const a = toLocal(position, path[i - 1]);
+    const b = toLocal(position, path[i]);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const squared = dx * dx + dy * dy;
+    const t =
+      squared === 0
+        ? 0
+        : Math.min(1, Math.max(0, -(a.x * dx + a.y * dy) / squared));
+    nearest = Math.min(nearest, Math.hypot(a.x + t * dx, a.y + t * dy));
+  }
+  return nearest;
+}
+
+/** 外れた位置が続けて届いた回数を数え直す。ルートに戻ったら 0 に戻す */
+export function countOffRoute(previous: number, distance: number): number {
+  return distance >= OFF_ROUTE_M ? previous + 1 : 0;
+}
+
+/** 外れたと知らせるか */
+export function isOffRoute(count: number): boolean {
+  return count >= OFF_ROUTE_COUNT;
+}

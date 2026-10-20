@@ -599,5 +599,57 @@ describe("MapView", () => {
       );
       expect(screen.getByRole("button", { name: "終了" })).toBeInTheDocument();
     });
+    it("ルートから外れた位置が2回続けて届くと「ルートから外れています」を出し、戻ると消す", async () => {
+      await startWalk();
+      move(HERE);
+      // 区間の途中から西へ約 90m
+      const off = { lat: 35.6915, lng: 139.6907 };
+      move(off);
+      expect(screen.queryByRole("alert")).toBeNull();
+      move(off);
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "ルートから外れています",
+      );
+      move({ lat: 35.6915, lng: 139.6917 });
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("「出発」で画面のスリープ防止を取得し、「終了」で解放する", async () => {
+      const release = vi.fn(async () => {});
+      const request = vi.fn(async () => ({ release }));
+      vi.stubGlobal("navigator", {
+        ...navigator,
+        wakeLock: { request },
+      });
+      await startWalk();
+      await act(async () => {});
+      expect(request).toHaveBeenCalledWith("screen");
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+      });
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    it("スリープ防止が使えない・断られた環境でも、散歩は続けられる", async () => {
+      // jsdom の navigator には wakeLock がない
+      await startWalk();
+      move(HERE);
+      expect(screen.getByTestId("walk-progress")).toBeInTheDocument();
+      cleanup();
+
+      vi.stubGlobal("navigator", {
+        ...navigator,
+        wakeLock: {
+          request: vi.fn(async () => {
+            throw new Error("NotAllowedError");
+          }),
+        },
+      });
+      await startWalk();
+      await act(async () => {});
+      move(HERE);
+      expect(screen.getByTestId("walk-progress")).toBeInTheDocument();
+    });
   });
 });

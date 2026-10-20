@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { distanceBetween } from "./loop-route";
 import {
+  countOffRoute,
   cumulativeDistances,
+  distanceToRoute,
+  isOffRoute,
+  OFF_ROUTE_M,
   SEARCH_AHEAD_M,
   walkedDistance,
 } from "./walk-progress";
@@ -59,5 +63,53 @@ describe("walkedDistance", () => {
   it("前回の位置が終盤なら、出発点に戻ってきたときに全長まで進む", () => {
     const total = cumulativeDistances(LOOP)[3];
     expect(walkedDistance(LOOP, A, total - 100)).toBeCloseTo(total, 5);
+  });
+});
+
+describe("distanceToRoute", () => {
+  it("ルート上なら 0、横に外れていればその距離を返す", () => {
+    expect(distanceToRoute(LOOP, { lat: 35.6915, lng: 139.6917 })).toBeCloseTo(
+      0,
+      5,
+    );
+    // 区間 A→B から西へ 0.001°（約 90m）
+    const west = { lat: 35.6915, lng: 139.6907 };
+    expect(distanceToRoute(LOOP, west)).toBeCloseTo(
+      distanceBetween(west, { lat: 35.6915, lng: 139.6917 }),
+      0,
+    );
+  });
+
+  it("区間の端より先にいるときは、端の点までの距離を返す", () => {
+    const south = { lat: 35.6885, lng: 139.6917 };
+    expect(distanceToRoute(LOOP, south)).toBeCloseTo(
+      distanceBetween(south, A),
+      0,
+    );
+  });
+});
+
+describe("ルートから外れたことの検知", () => {
+  const far = OFF_ROUTE_M + 10;
+  const near = OFF_ROUTE_M - 10;
+
+  it(`${OFF_ROUTE_M}m 以上の外れが2回続けて届いたら、外れたとみなす`, () => {
+    const once = countOffRoute(0, far);
+    expect(isOffRoute(once)).toBe(false);
+    expect(isOffRoute(countOffRoute(once, far))).toBe(true);
+    // ちょうど 50m も外れとして数える
+    expect(countOffRoute(1, OFF_ROUTE_M)).toBe(2);
+  });
+
+  it("1回だけ外れて戻った場合は、外れたとみなさない", () => {
+    const back = countOffRoute(countOffRoute(0, far), near);
+    expect(back).toBe(0);
+    expect(isOffRoute(countOffRoute(back, far))).toBe(false);
+  });
+
+  it("外れたあとルートに戻ったら、外れた状態を解く", () => {
+    const off = countOffRoute(countOffRoute(0, far), far);
+    expect(isOffRoute(off)).toBe(true);
+    expect(isOffRoute(countOffRoute(off, near))).toBe(false);
   });
 });
