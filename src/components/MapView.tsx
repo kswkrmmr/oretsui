@@ -22,7 +22,7 @@ import {
   pixelToWorldPoint,
   type Point,
 } from "@/lib/long-press";
-import { ANIKI_LINES, anikiScene } from "@/lib/aniki";
+import { ANIKI_LINES, anikiScene, type AnikiScene } from "@/lib/aniki";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
 import { isOffRoute } from "@/lib/walk-progress";
@@ -59,11 +59,20 @@ export function MapView({ apiKey }: Props) {
   const currentDot = walking ? walkPosition : state.current;
   // 兄貴の一言（#41）。「別のルート」で作ったかどうかで言い方を変える
   const [anotherRoute, setAnotherRoute] = useState(false);
-  const scene = anikiScene({
-    hasStart: start !== null,
-    routeStatus: route.status,
-    another: anotherRoute,
-  });
+  // 散歩を終えたら、次の操作まで「おつかれ」と言う（#42）
+  const [finished, setFinished] = useState(false);
+  const scene: AnikiScene | null =
+    walk.state.status === "walking"
+      ? walk.state.talk.scene
+      : walk.state.status === "unavailable"
+        ? "lost"
+        : finished && route.status === "done"
+          ? "finished"
+          : anikiScene({
+              hasStart: start !== null,
+              routeStatus: route.status,
+              another: anotherRoute,
+            });
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -168,22 +177,31 @@ export function MapView({ apiKey }: Props) {
                     walk={walk.state}
                     total={walk.total}
                     onStartWalk={() => {
+                      setFinished(false);
                       setFollowing(true);
                       walk.start();
                     }}
-                    onStopWalk={walk.stop}
+                    onStopWalk={() => {
+                      setFinished(true);
+                      walk.stop();
+                    }}
                     onRetry={() => {
                       setShowConditions(false);
                       retry();
                     }}
                     onAnother={() => {
+                      setFinished(false);
                       setAnotherRoute(true);
                       another();
                     }}
-                    onEditConditions={() => setShowConditions(true)}
+                    onEditConditions={() => {
+                      setFinished(false);
+                      setShowConditions(true);
+                    }}
                   />
                 }
                 onGenerate={(meters) => {
+                  setFinished(false);
                   setAnotherRoute(false);
                   setRouteDistance(meters);
                   setShowConditions(false);

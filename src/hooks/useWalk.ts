@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { nextWalkTalk, startWalkTalk, type WalkTalk } from "@/lib/aniki";
 import type { LatLng } from "@/lib/start-point";
 import {
   countOffRoute,
@@ -17,6 +18,8 @@ export type WalkState =
       walked: number;
       /** ルートから外れた位置が続けて届いた回数（#36） */
       offRouteCount: number;
+      /** 兄貴の一言（#42） */
+      talk: WalkTalk;
     }
   | { status: "unavailable" };
 
@@ -46,28 +49,36 @@ export function useWalk(path: LatLng[]) {
       setState({ status: "unavailable" });
       return;
     }
+    const length = cumulativeDistances(path).at(-1) ?? 0;
     setState({
       status: "walking",
       position: null,
       walked: 0,
       offRouteCount: 0,
+      talk: startWalkTalk(),
     });
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const position = { lat: coords.latitude, lng: coords.longitude };
-        setState((previous) =>
-          previous.status === "walking"
-            ? {
-                status: "walking",
-                position,
-                walked: walkedDistance(path, position, previous.walked),
-                offRouteCount: countOffRoute(
-                  previous.offRouteCount,
-                  distanceToRoute(path, position),
-                ),
-              }
-            : previous,
-        );
+        setState((previous) => {
+          if (previous.status !== "walking") return previous;
+          const walked = walkedDistance(path, position, previous.walked);
+          const offRouteCount = countOffRoute(
+            previous.offRouteCount,
+            distanceToRoute(path, position),
+          );
+          return {
+            status: "walking",
+            position,
+            walked,
+            offRouteCount,
+            talk: nextWalkTalk(previous.talk, {
+              walked,
+              total: length,
+              offRouteCount,
+            }),
+          };
+        });
       },
       // 許可がないときだけ止める。タイムアウトや一時的な取得不能は、次の位置を待つ
       (error) => {
