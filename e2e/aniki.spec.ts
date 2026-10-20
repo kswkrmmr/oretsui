@@ -3,6 +3,10 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 // 外側（DOM 上で先に出てくる）コンテナを明示的に指定する
 const mapContainer = (page: Page) => page.getByTestId("map").first();
 
+/** 兄貴の顔の画像が、その表情のものか（next/image は URL をエンコードして渡す） */
+const faceOf = (face: string) =>
+  new RegExp(encodeURIComponent(`/aniki/${face}.png`));
+
 const ROUTE = {
   distanceMeters: 2134,
   durationSeconds: 1620,
@@ -49,21 +53,43 @@ test("出発点が決まる → ルートを作る → できる → 別のル�
   await expect(line).toHaveText("いい道を探してくる。ちょっと待ってな");
   await respond(ok);
   await expect(line).toHaveText("いい道を見つけたぞ。俺についてこい！");
+  const face = page.getByRole("img", { name: "兄貴" });
+  await expect(face).toHaveAttribute("src", faceOf("smile"));
 
   await page.getByRole("button", { name: "別のルート" }).click();
   await expect(line).toHaveText("いい道を探してくる。ちょっと待ってな");
   await respond(ok);
   await expect(line).toHaveText("じゃあ、こっちの道はどうだ？");
+  await expect(face).toHaveAttribute("src", faceOf("normal"));
 
   await page.getByRole("button", { name: "別のルート" }).click();
   await respond(fail);
   await expect(line).toHaveText(
     "すまん、道が見つからなかった。もう一回いいか？",
   );
+  await expect(face).toHaveAttribute("src", faceOf("troubled"));
   // 今ある表示はそのまま残る
   await expect(
     page.getByRole("region", { name: "散歩の条件" }).getByRole("alert"),
   ).toContainText("ルートを作れませんでした");
+});
+
+test("兄貴の顔の画像は4枚とも読み込める", async ({ page, request }) => {
+  for (const face of ["normal", "smile", "fired-up", "troubled"]) {
+    const response = await request.get(`/aniki/${face}.png`);
+    expect(response.status(), face).toBe(200);
+  }
+  // 画面に出した顔も、縮めた画像が届いて表示できている
+  await page.goto("/");
+  const face = page.getByRole("img", { name: "兄貴" });
+  await expect(face).toBeVisible();
+  await expect
+    .poll(() =>
+      face.evaluate(
+        (img: HTMLImageElement) => img.complete && img.naturalWidth,
+      ),
+    )
+    .toBeGreaterThan(0);
 });
 
 test("出発点が決まるまでは兄貴を出さない", async ({ page, context }) => {
@@ -161,6 +187,10 @@ test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る →
   await expect(line).toHaveText("半分来たぞ。やるなー！");
   await moveTo(35.69127, 139.69392);
   await expect(line).toHaveText("あと少しだ。最後まで一緒に行こう");
+  await expect(page.getByRole("img", { name: "兄貴" })).toHaveAttribute(
+    "src",
+    faceOf("fired-up"),
+  );
 
   // 西へ約 100m 外れた位置が2回続く
   await moveTo(35.69127, 139.69272);

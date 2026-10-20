@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ALMOST_M,
   ANIKI_LINES,
+  anikiFace,
+  anikiFaceSrc,
   anikiScene,
   nextWalkTalk,
   startWalkTalk,
@@ -142,5 +144,44 @@ describe("散歩中の一言", () => {
       "almost",
       "almost",
     ]);
+  });
+});
+
+describe("兄貴の表情（#47）", () => {
+  it("12の場面すべてに、issue で決めた表情が選ばれる", () => {
+    expect({
+      ready: anikiFace("ready"),
+      searching: anikiFace("searching"),
+      another: anikiFace("another"),
+      found: anikiFace("found"),
+      start: anikiFace("start"),
+      half: anikiFace("half"),
+      backOnRoute: anikiFace("backOnRoute"),
+      finished: anikiFace("finished"),
+      almost: anikiFace("almost"),
+      failed: anikiFace("failed"),
+      offRoute: anikiFace("offRoute"),
+      lost: anikiFace("lost"),
+    }).toEqual({
+      ready: "normal",
+      searching: "normal",
+      another: "normal",
+      found: "smile",
+      start: "smile",
+      half: "smile",
+      backOnRoute: "smile",
+      finished: "smile",
+      almost: "fired-up",
+      failed: "troubled",
+      offRoute: "troubled",
+      lost: "troubled",
+    });
+  });
+
+  it("表情ごとの画像は public/aniki/ に置いたファイル", () => {
+    expect(anikiFaceSrc("normal")).toBe("/aniki/normal.png");
+    expect(anikiFaceSrc("smile")).toBe("/aniki/smile.png");
+    expect(anikiFaceSrc("fired-up")).toBe("/aniki/fired-up.png");
+    expect(anikiFaceSrc("troubled")).toBe("/aniki/troubled.png");
   });
 });

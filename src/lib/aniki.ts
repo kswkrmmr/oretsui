@@ -32,6 +32,34 @@ export const ANIKI_LINES: Record<AnikiScene, string> = {
   finished: "おつかれ！いい散歩だったな",
 };
 
+/** 兄貴の表情（#47）。画像は人間が用意したもの（#46） */
+export type AnikiFace = "normal" | "smile" | "fired-up" | "troubled";
+
+/** 場面ごとの表情。対応は issue #47 で人間と決めたもの */
+const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
+  ready: "normal",
+  searching: "normal",
+  another: "normal",
+  found: "smile",
+  start: "smile",
+  half: "smile",
+  backOnRoute: "smile",
+  finished: "smile",
+  almost: "fired-up",
+  failed: "troubled",
+  offRoute: "troubled",
+  lost: "troubled",
+};
+
+export function anikiFace(scene: AnikiScene): AnikiFace {
+  return ANIKI_FACES[scene];
+}
+
+/** 表情の画像の場所（public/aniki/） */
+export function anikiFaceSrc(face: AnikiFace): string {
+  return `/aniki/${face}.png`;
+}
+
 export type AnikiInput = {
   /** 出発点が決まっているか */
   hasStart: boolean;
