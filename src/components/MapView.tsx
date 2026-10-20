@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
 import { useStartPoint } from "@/hooks/useStartPoint";
+import { useWalk, type WalkState } from "@/hooks/useWalk";
 import { formatDistance, formatDuration } from "@/lib/format";
 import {
   LONG_PRESS_MS,
@@ -37,6 +38,19 @@ export function MapView({ apiKey }: Props) {
   const [showConditions, setShowConditions] = useState(true);
   const collapsed =
     !showConditions && (route.status === "loading" || route.status === "done");
+  const encodedPolyline =
+    route.status === "done" ? route.route.encodedPolyline : "";
+  const path = useMemo(
+    () => decodePolyline(encodedPolyline),
+    [encodedPolyline],
+  );
+  const walk = useWalk(path);
+  const walking = walk.state.status !== "idle";
+  // 散歩中は地図を現在地に追従させる。指で地図を動かしたらやめ、「現在地に戻る」で再開する
+  const [following, setFollowing] = useState(true);
+  const walkPosition =
+    walk.state.status === "walking" ? walk.state.position : null;
+  const currentDot = walking ? walkPosition : state.current;
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
   const startAttributes = start
@@ -72,11 +86,13 @@ export function MapView({ apiKey }: Props) {
               onClick={onMapEvent(tap)}
               // PC の右クリックと Android の長押し用（iOS の長押しは LongPressHandler で受ける）
               onContextmenu={onMapEvent(longPress)}
+              onDragstart={() => setFollowing(false)}
             >
               <CenterController request={state.centerRequest} />
               <LongPressHandler onLongPress={longPress} />
-              {state.current && (
-                <AdvancedMarker position={state.current} title="現在地">
+              {following && <FollowController position={walkPosition} />}
+              {currentDot && (
+                <AdvancedMarker position={currentDot} title="現在地">
                   <div
                     data-testid="current-location-dot"
                     className="h-4 w-4 rounded-full border-2 border-white bg-blue-500 shadow"
@@ -88,9 +104,7 @@ export function MapView({ apiKey }: Props) {
                   <Pin />
                 </AdvancedMarker>
               )}
-              {route.status === "done" && (
-                <RouteLine encodedPolyline={route.route.encodedPolyline} />
-              )}
+              {path.length > 0 && <RouteLine path={path} />}
             </Map>
           </APIProvider>
           {state.showNotice && (
@@ -106,7 +120,7 @@ export function MapView({ apiKey }: Props) {
             <button
               type="button"
               aria-label="現在地に戻る"
-              onClick={recenter}
+              onClick={walking ? () => setFollowing(true) : recenter}
               className="pointer-events-auto mr-4 flex h-14 w-14 items-center justify-center rounded-full bg-white text-blue-600 shadow-lg active:bg-neutral-100"
             >
               <svg
@@ -129,6 +143,13 @@ export function MapView({ apiKey }: Props) {
                   <RouteStatus
                     state={route}
                     collapsed={collapsed}
+                    walk={walk.state}
+                    total={walk.total}
+                    onStartWalk={() => {
+                      setFollowing(true);
+                      walk.start();
+                    }}
+                    onStopWalk={walk.stop}
                     onRetry={() => {
                       setShowConditions(false);
                       retry();
@@ -161,14 +182,10 @@ export function MapView({ apiKey }: Props) {
 const ROUTE_PADDING = { top: 64, right: 32, bottom: 320, left: 32 };
 
 /** 作ったルートを地図に線で描き、ルート全体が画面に収まるようにズームする */
-function RouteLine({ encodedPolyline }: { encodedPolyline: string }) {
+function RouteLine({ path }: { path: LatLng[] }) {
   const map = useMap();
-  const path = useMemo(
-    () => decodePolyline(encodedPolyline),
-    [encodedPolyline],
-  );
   useEffect(() => {
-    if (!map || path.length === 0) return;
+    if (!map) return;
     const line = new google.maps.Polyline({
       path,
       map,
@@ -185,22 +202,57 @@ function RouteLine({ encodedPolyline }: { encodedPolyline: string }) {
 }
 
 /**
- * シートの上部に出す、ルートの状態。条件を隠しているときは「別のルート」と「条件を変える」も出す。
- * 失敗したときはエラーと再試行ボタン
+ * シートの上部に出す、ルートの状態。条件を隠しているときは「別のルート」「条件を変える」「出発」も出す。
+ * 散歩中は進み具合と「終了」。失敗したときはエラーと再試行ボタン
  */
 function RouteStatus({
   state,
   collapsed,
+  walk,
+  total,
+  onStartWalk,
+  onStopWalk,
   onRetry,
   onAnother,
   onEditConditions,
 }: {
   state: LoopRouteState;
   collapsed: boolean;
+  walk: WalkState;
+  total: number;
+  onStartWalk: () => void;
+  onStopWalk: () => void;
   onRetry: () => void;
   onAnother: () => void;
   onEditConditions: () => void;
 }) {
+  if (walk.status !== "idle") {
+    return (
+      <>
+        {walk.status === "walking" ? (
+          <p data-testid="walk-progress" className="text-center text-sm">
+            歩いた{" "}
+            <strong className="text-base">{formatDistance(walk.walked)}</strong>{" "}
+            / 残り{" "}
+            <strong className="text-base">
+              {formatDistance(total - walk.walked)}
+            </strong>
+          </p>
+        ) : (
+          <p role="alert" className="text-center text-sm text-red-700">
+            現在地を取得できません
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={onStopWalk}
+          className="min-h-12 rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
+        >
+          終了
+        </button>
+      </>
+    );
+  }
   if (state.status === "loading" && collapsed) {
     return (
       <p role="status" className="py-3 text-center text-sm">
@@ -241,6 +293,13 @@ function RouteStatus({
             別のルート
           </button>
         </div>
+        <button
+          type="button"
+          onClick={onStartWalk}
+          className="min-h-12 rounded-xl bg-blue-600 font-bold text-white active:bg-blue-700"
+        >
+          出発
+        </button>
       </>
     );
   }
@@ -260,6 +319,15 @@ function RouteStatus({
       </div>
     );
   }
+  return null;
+}
+
+/** 散歩中、現在地が変わるたびに地図の中心を現在地へ移す */
+function FollowController({ position }: { position: LatLng | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (map && position) map.panTo(position);
+  }, [map, position]);
   return null;
 }
 
