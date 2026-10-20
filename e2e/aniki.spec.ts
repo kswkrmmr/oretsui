@@ -120,3 +120,58 @@ test("兄貴の吹き出しは「現在地に戻る」ボタンや条件のシ�
   );
   await check();
 });
+
+test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る → 終了 の順に兄貴のセリフが入れ替わる", async ({
+  page,
+  context,
+}) => {
+  // 出発点から北へ約445m、東へ約452m、出発点へ戻る三角形（全長 約1.5km）
+  await page.route("**/api/route", (route) =>
+    route.fulfill({
+      json: { ...ROUTE, encodedPolyline: "kryxEcprsY_X??g^~Wf^" },
+    }),
+  );
+  await page.goto("/");
+  await expect(mapContainer(page)).toHaveAttribute(
+    "data-start-source",
+    "current",
+  );
+  await page.getByRole("button", { name: "ルートを作る" }).click();
+  await page.getByRole("button", { name: "出発" }).click();
+  const line = page.getByTestId("aniki-line");
+  const progress = page.getByTestId("walk-progress");
+  const moveTo = async (latitude: number, longitude: number) =>
+    context.setGeolocation({ latitude, longitude });
+
+  await expect(line).toHaveText("よし、行くぞ！俺についてこい！");
+  // 北へ進み、東の区間へ。進み具合は一度に 300m 先までしか探さないので、少しずつ動かす
+  await moveTo(35.6915, 139.6917);
+  await expect(progress).toContainText("歩いた 222 m");
+  await moveTo(35.6935, 139.6917);
+  await moveTo(35.6935, 139.694);
+  // 位置の更新が届いたことを確かめてから次へ進む（約 650m）
+  await expect(progress).toContainText(/歩いた 6[45]\d m/);
+  await expect(line).toHaveText("よし、行くぞ！俺についてこい！");
+  await moveTo(35.6935, 139.6955);
+  await expect(line).toHaveText("半分来たぞ。やるなー！");
+
+  // 東の角から出発点へ戻る区間
+  await moveTo(35.6935, 139.6967);
+  await moveTo(35.6919, 139.6947);
+  await expect(line).toHaveText("半分来たぞ。やるなー！");
+  await moveTo(35.69127, 139.69392);
+  await expect(line).toHaveText("あと少しだ。最後まで一緒に行こう");
+
+  // 西へ約 100m 外れた位置が2回続く
+  await moveTo(35.69127, 139.69272);
+  await moveTo(35.69128, 139.69272);
+  await expect(line).toHaveText("おっと、そっちじゃないぞ。ルートに戻ろう");
+  await moveTo(35.69127, 139.69392);
+  await expect(line).toHaveText("そうそう、その調子！");
+
+  await page.getByRole("button", { name: "終了" }).click();
+  await expect(line).toHaveText("おつかれ！いい散歩だったな");
+  // 次の操作で入れ替わる
+  await page.getByRole("button", { name: "条件を変える" }).click();
+  await expect(line).toHaveText("いい道を見つけたぞ。俺についてこい！");
+});

@@ -599,6 +599,23 @@ describe("MapView", () => {
       );
       expect(screen.getByRole("button", { name: "終了" })).toBeInTheDocument();
     });
+
+    it("位置情報の許可がないときは、兄貴が位置情報の許可を頼む", async () => {
+      await startWalk();
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "よし、行くぞ！俺についてこい！",
+      );
+      act(() =>
+        geo.watchPosition.mock.lastCall![1]({
+          code: 1,
+          message: "",
+          PERMISSION_DENIED: 1,
+        } as GeolocationPositionError),
+      );
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "今どこにいるか分からないな…位置情報を許可してくれるか？",
+      );
+    });
     it("ルートから外れた位置が2回続けて届くと「ルートから外れています」を出し、戻ると消す", async () => {
       await startWalk();
       move(HERE);
