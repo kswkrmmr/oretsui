@@ -79,6 +79,8 @@ export function useWalk(path: LatLng[]) {
           const offRouteCount = countOffRoute(
             previous.offRouteCount,
             distanceToRoute(path, position),
+            // GPS の精度に合わせて外れの基準を変える（#53）
+            coords.accuracy,
           );
           return {
             status: "walking",

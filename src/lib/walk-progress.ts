@@ -92,9 +92,37 @@ export function distanceToRoute(path: LatLng[], position: LatLng): number {
   return nearest;
 }
 
-/** 外れた位置が続けて届いた回数を数え直す。ルートに戻ったら 0 に戻す */
-export function countOffRoute(previous: number, distance: number): number {
-  return distance >= OFF_ROUTE_M ? previous + 1 : 0;
+/** 精度に合わせた外れの基準の、いちばん厳しい値（m）（#53） */
+export const OFF_ROUTE_MIN_M = 25;
+/** 精度に足す余裕（m）（#53） */
+export const OFF_ROUTE_MARGIN_M = 15;
+/** これより精度が悪い（m）位置は、外れの判定に使わない（#53） */
+export const OFF_ROUTE_MAX_ACCURACY_M = 50;
+
+/**
+ * 外れの基準（m）。GPS の精度が良いときは厳しく、悪いときはゆるくする（#53）。
+ * 「精度 + 15m」を 25m〜50m に収める。精度が取れないときは今までどおり 50m
+ */
+export function offRouteThreshold(accuracy: number | undefined): number {
+  if (accuracy === undefined || Number.isNaN(accuracy)) return OFF_ROUTE_M;
+  return Math.min(
+    OFF_ROUTE_M,
+    Math.max(OFF_ROUTE_MIN_M, accuracy + OFF_ROUTE_MARGIN_M),
+  );
+}
+
+/**
+ * 外れた位置が続けて届いた回数を数え直す。ルートに戻ったら 0 に戻す。
+ * accuracy は位置の精度（m）。精度が悪すぎる位置は判定に使わず、回数をそのままにする（#53）
+ */
+export function countOffRoute(
+  previous: number,
+  distance: number,
+  accuracy?: number,
+): number {
+  if (accuracy !== undefined && accuracy > OFF_ROUTE_MAX_ACCURACY_M)
+    return previous;
+  return distance >= offRouteThreshold(accuracy) ? previous + 1 : 0;
 }
 
 /** 外れたと知らせるか */
