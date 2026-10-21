@@ -67,6 +67,8 @@ describe("ANIKI_LINES", () => {
       backOnRoute: "そうそう、その調子！",
       lost: "今どこにいるか分からないな…位置情報を許可してくれるか？",
       finished: "おつかれ！いい散歩だったな",
+      // 逆回りに切り替えたとき（#52）
+      reversed: "そっちか！ならこっちだ、俺についてこい！",
     });
   });
 });
@@ -201,5 +203,14 @@ describe("anikiLine（#50）", () => {
   it("ほかの場面は方角があってもセリフを変えない", () => {
     expect(anikiLine("ready", "北")).toBe(ANIKI_LINES.ready);
     expect(anikiLine("start", "北")).toBe(ANIKI_LINES.start);
+  });
+});
+
+describe("逆回りに切り替えたときの一言（#52）", () => {
+  it("issue で決めたセリフと、燃えている表情", () => {
+    expect(anikiLine("reversed", null)).toBe(
+      "そっちか！ならこっちだ、俺についてこい！",
+    );
+    expect(anikiFace("reversed")).toBe("fired-up");
   });
 });

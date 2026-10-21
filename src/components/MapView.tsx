@@ -9,7 +9,7 @@ import {
   useMap,
   type MapMouseEvent,
 } from "@vis.gl/react-google-maps";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Aniki } from "@/components/Aniki";
 import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
@@ -91,7 +91,7 @@ export function MapView({ apiKey }: Props) {
     : {};
   // 兄貴は地図の上で、自分がルート上で歩いた距離の少し先にいる（#51）
   const aniki = anikiPosition(
-    path,
+    walk.activePath,
     walk.state.status === "walking" ? walk.state.walked : 0,
   );
   const anikiAttributes = aniki
@@ -142,7 +142,9 @@ export function MapView({ apiKey }: Props) {
                   <Pin />
                 </AdvancedMarker>
               )}
-              {path.length > 0 && <RouteLine path={path} />}
+              {path.length > 0 && (
+                <RouteLine path={path} reversed={walk.reversed} />
+              )}
               {aniki && (
                 <AdvancedMarker position={aniki} title="兄貴" zIndex={10}>
                   <Image
@@ -254,8 +256,31 @@ export function MapView({ apiKey }: Props) {
 const ROUTE_PADDING = { top: 64, right: 32, bottom: 320, left: 32 };
 
 /** 作ったルートを地図に線で描き、ルート全体が画面に収まるようにズームする */
-function RouteLine({ path }: { path: LatLng[] }) {
+/**
+ * 進む向きの矢印（#50）。画面上の間隔で並べるので、ズームしても詰まらない。
+ * 逆回りのときは逆向きの矢印にする（#52）
+ */
+function arrowIcons(reversed: boolean): google.maps.IconSequence[] {
+  return [
+    {
+      icon: {
+        path: reversed
+          ? google.maps.SymbolPath.BACKWARD_CLOSED_ARROW
+          : google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        scale: 3,
+        strokeColor: "#ffffff",
+        strokeWeight: 1,
+        fillColor: "#ffffff",
+        fillOpacity: 1,
+      },
+      repeat: "80px",
+    },
+  ];
+}
+
+function RouteLine({ path, reversed }: { path: LatLng[]; reversed: boolean }) {
   const map = useMap();
+  const lineRef = useRef<google.maps.Polyline | null>(null);
   useEffect(() => {
     if (!map) return;
     const line = new google.maps.Polyline({
@@ -264,26 +289,21 @@ function RouteLine({ path }: { path: LatLng[] }) {
       strokeColor: "#16a34a",
       strokeOpacity: 0.9,
       strokeWeight: 6,
-      // 進む向きの矢印（#50）。画面上の間隔で並べるので、ズームしても詰まらない
-      icons: [
-        {
-          icon: {
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 3,
-            strokeColor: "#ffffff",
-            strokeWeight: 1,
-            fillColor: "#ffffff",
-            fillOpacity: 1,
-          },
-          repeat: "80px",
-        },
-      ],
+      icons: arrowIcons(false),
     });
+    lineRef.current = line;
     const bounds = new google.maps.LatLngBounds();
     for (const point of path) bounds.extend(point);
     map.fitBounds(bounds, ROUTE_PADDING);
-    return () => line.setMap(null);
+    return () => {
+      line.setMap(null);
+      lineRef.current = null;
+    };
   }, [map, path]);
+  // 向きが変わったら矢印だけ差し替える（線を作り直すと、散歩中に地図がズームし直してしまう）
+  useEffect(() => {
+    lineRef.current?.setOptions({ icons: arrowIcons(reversed) });
+  }, [reversed]);
   return null;
 }
 

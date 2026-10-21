@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { nextWalkTalk, startWalkTalk, type WalkTalk } from "@/lib/aniki";
 import type { LatLng } from "@/lib/start-point";
+import {
+  initialWalkDirection,
+  nextWalkDirection,
+  reversePath,
+  type WalkDirection,
+} from "@/lib/walk-direction";
 import {
   countOffRoute,
   cumulativeDistances,
   distanceToRoute,
-  walkedDistance,
 } from "@/lib/walk-progress";
 
 export type WalkState =
@@ -20,6 +25,8 @@ export type WalkState =
       offRouteCount: number;
       /** 兄貴の一言（#42） */
       talk: WalkTalk;
+      /** 歩いている向き。逆向きに歩き出したら逆回りとして扱う（#52） */
+      direction: WalkDirection;
     }
   | { status: "unavailable" };
 
@@ -56,13 +63,19 @@ export function useWalk(path: LatLng[]) {
       walked: 0,
       offRouteCount: 0,
       talk: startWalkTalk(),
+      direction: initialWalkDirection(),
     });
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const position = { lat: coords.latitude, lng: coords.longitude };
         setState((previous) => {
           if (previous.status !== "walking") return previous;
-          const walked = walkedDistance(path, position, previous.walked);
+          const { state: direction, switched } = nextWalkDirection(
+            previous.direction,
+            path,
+            position,
+          );
+          const walked = direction.walked;
           const offRouteCount = countOffRoute(
             previous.offRouteCount,
             distanceToRoute(path, position),
@@ -72,11 +85,15 @@ export function useWalk(path: LatLng[]) {
             position,
             walked,
             offRouteCount,
-            talk: nextWalkTalk(previous.talk, {
-              walked,
-              total: length,
-              offRouteCount,
-            }),
+            // 逆回りに切り替えたときは、兄貴がそのことを言う
+            talk: switched
+              ? { ...previous.talk, scene: "reversed" }
+              : nextWalkTalk(previous.talk, {
+                  walked,
+                  total: length,
+                  offRouteCount,
+                }),
+            direction,
           };
         });
       },
@@ -98,5 +115,12 @@ export function useWalk(path: LatLng[]) {
     [],
   );
 
-  return { state, total, start, stop };
+  // 今の向きで歩くルート。逆回りなら点の並びを逆にしたもの（兄貴の位置などに使う）
+  const reversed = state.status === "walking" && state.direction.reversed;
+  const activePath = useMemo(
+    () => (reversed ? reversePath(path) : path),
+    [path, reversed],
+  );
+
+  return { state, total, start, stop, reversed, activePath };
 }
