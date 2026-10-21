@@ -31,7 +31,7 @@ import {
 } from "@/lib/aniki";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
-import { anikiPosition, firstDirection } from "@/lib/route-direction";
+import { anikiPosition } from "@/lib/route-direction";
 import { isOffRoute } from "@/lib/walk-progress";
 import type { LatLng, StartPointState } from "@/lib/start-point";
 
@@ -172,7 +172,7 @@ export function MapView({ apiKey }: Props) {
             <div className="flex w-full items-end gap-3 px-4">
               {scene ? (
                 <div className="pointer-events-auto flex min-w-0 flex-1">
-                  <Aniki scene={scene} direction={firstDirection(path)} />
+                  <Aniki scene={scene} />
                 </div>
               ) : (
                 <div className="flex-1" />

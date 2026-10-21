@@ -35,16 +35,6 @@ export const ANIKI_LINES: Record<AnikiScene, string> = {
   reversed: "そっちか！ならこっちだ、俺についてこい！",
 };
 
-/**
- * 場面のセリフ。ルートができたとき（found）は、最初に進む方角を入れて言う（#50）。
- * 方角が分からなければ ANIKI_LINES のまま
- */
-export function anikiLine(scene: AnikiScene, direction: string | null): string {
-  if (scene === "found" && direction)
-    return `いい道を見つけたぞ。まずは${direction}へ行くぞ、俺についてこい！`;
-  return ANIKI_LINES[scene];
-}
-
 /** 兄貴の表情（#47）。画像は人間が用意したもの（#46） */
 export type AnikiFace = "normal" | "smile" | "fired-up" | "troubled";
 

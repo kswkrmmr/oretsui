@@ -52,9 +52,7 @@ test("出発点が決まる → ルートを作る → できる → 別のル�
   await page.getByRole("button", { name: "ルートを作る" }).click();
   await expect(line).toHaveText("いい道を探してくる。ちょっと待ってな");
   await respond(ok);
-  await expect(line).toHaveText(
-    "いい道を見つけたぞ。まずは北へ行くぞ、俺についてこい！",
-  );
+  await expect(line).toHaveText("いい道を見つけたぞ。俺についてこい！");
   const face = page.getByRole("img", { name: "兄貴" });
   await expect(face).toHaveAttribute("src", faceOf("smile"));
 
@@ -144,7 +142,7 @@ test("兄貴の吹き出しは「現在地に戻る」ボタンや条件のシ�
   await check();
   await page.getByRole("button", { name: "ルートを作る" }).click();
   await expect(page.getByTestId("aniki-line")).toHaveText(
-    "いい道を見つけたぞ。まずは北へ行くぞ、俺についてこい！",
+    "いい道を見つけたぞ。俺についてこい！",
   );
   await check();
 });
@@ -205,7 +203,5 @@ test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る →
   await expect(line).toHaveText("おつかれ！いい散歩だったな");
   // 次の操作で入れ替わる
   await page.getByRole("button", { name: "条件を変える" }).click();
-  await expect(line).toHaveText(
-    "いい道を見つけたぞ。まずは北へ行くぞ、俺についてこい！",
-  );
+  await expect(line).toHaveText("いい道を見つけたぞ。俺についてこい！");
 });
