@@ -37,6 +37,7 @@ const mocks = vi.hoisted(() => {
       path: unknown;
       icons?: unknown;
       setMap: ReturnType<typeof vi.fn>;
+      setOptions?: ReturnType<typeof vi.fn>;
     }[],
     // 本物と同じく、同じ地図には同じオブジェクトを返す。中心は北緯30度・東経100度、ズーム0
     map: {
@@ -178,11 +179,17 @@ describe("MapView", () => {
         },
         Polyline: class {
           setMap = vi.fn();
+          setOptions = vi.fn();
           constructor({ path, icons }: { path: unknown; icons?: unknown }) {
-            mocks.polylines.push({ path, icons, setMap: this.setMap });
+            mocks.polylines.push({
+              path,
+              icons,
+              setMap: this.setMap,
+              setOptions: this.setOptions,
+            });
           }
         },
-        SymbolPath: { FORWARD_CLOSED_ARROW: 1 },
+        SymbolPath: { FORWARD_CLOSED_ARROW: 1, BACKWARD_CLOSED_ARROW: 2 },
         LatLngBounds: class {
           points: unknown[] = [];
           extend(point: unknown) {
@@ -565,6 +572,59 @@ describe("MapView", () => {
       await generateRoute();
       fireEvent.click(screen.getByRole("button", { name: "出発" }));
     }
+
+    describe("逆回りに歩いても動く（#52）", () => {
+      // 出発点（HERE）から北へ約300m → 東 → 南 → 西へ戻る正方形。逆回りは東へ歩き出す
+      const SQUARE = "kryxEcprsY{O??sSzO??rS";
+      const east = (m: number) => ({
+        lat: HERE.lat,
+        lng: HERE.lng + m / 90_300,
+      });
+
+      async function startSquareWalk() {
+        fetchMock.mockImplementation(async () => routeResponse(200, SQUARE));
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        fireEvent.click(screen.getByRole("button", { name: "出発" }));
+      }
+
+      it("逆向きに歩き出すと、歩いた距離が増え、兄貴が切り替えの一言を言い、逆回りの少し前に来る", async () => {
+        await startSquareWalk();
+        move(east(20));
+        move(east(45));
+        expect(screen.getByTestId("walk-progress")).toHaveTextContent(
+          /歩いた 4\d m/,
+        );
+        expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+          "そっちか！ならこっちだ、俺についてこい！",
+        );
+        // 兄貴は東へ 45m + 30m の位置
+        expect(Number(container().getAttribute("data-aniki-lng"))).toBeCloseTo(
+          east(75).lng,
+          5,
+        );
+        expect(Number(container().getAttribute("data-aniki-lat"))).toBeCloseTo(
+          HERE.lat,
+          5,
+        );
+      });
+
+      it("逆回りに切り替えると、線の矢印も逆向きにする", async () => {
+        await startSquareWalk();
+        move(east(20));
+        move(east(45));
+        expect(mocks.polylines.at(-1)!.setOptions).toHaveBeenCalledWith({
+          icons: [
+            expect.objectContaining({
+              icon: expect.objectContaining({
+                path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+              }),
+            }),
+          ],
+        });
+      });
+    });
 
     describe("兄貴が少し前を歩く（#51）", () => {
       const anikiAt = () => ({

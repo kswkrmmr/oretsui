@@ -14,7 +14,9 @@ export type AnikiScene =
   | "offRoute"
   | "backOnRoute"
   | "lost"
-  | "finished";
+  | "finished"
+  // 逆向きに歩き出して、逆回りに切り替えたとき（#52）
+  | "reversed";
 
 /** 場面ごとのセリフ。文言は issue #41・#42 で人間と決めたもの */
 export const ANIKI_LINES: Record<AnikiScene, string> = {
@@ -30,6 +32,7 @@ export const ANIKI_LINES: Record<AnikiScene, string> = {
   backOnRoute: "そうそう、その調子！",
   lost: "今どこにいるか分からないな…位置情報を許可してくれるか？",
   finished: "おつかれ！いい散歩だったな",
+  reversed: "そっちか！ならこっちだ、俺についてこい！",
 };
 
 /**
@@ -56,6 +59,7 @@ const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
   backOnRoute: "smile",
   finished: "smile",
   almost: "fired-up",
+  reversed: "fired-up",
   failed: "troubled",
   offRoute: "troubled",
   lost: "troubled",
