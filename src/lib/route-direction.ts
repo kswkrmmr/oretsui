@@ -60,3 +60,15 @@ export function firstDirection(path: LatLng[]): Compass | null {
   if (path.length < 2) return null;
   return compassName(path[0], pointAlong(path, FIRST_DIRECTION_M));
 }
+
+/** 兄貴は、自分がルート上で歩いた距離のこの距離（m）先にいる（#51） */
+export const ANIKI_LEAD_M = 30;
+
+/**
+ * 兄貴の位置。ルートの上の「歩いた距離 + ANIKI_LEAD_M」の点（全長を超えたら終点）。
+ * ルートがない（点が1つ以下）ときは出さない（null）
+ */
+export function anikiPosition(path: LatLng[], walked: number): LatLng | null {
+  if (path.length < 2) return null;
+  return pointAlong(path, walked + ANIKI_LEAD_M);
+}

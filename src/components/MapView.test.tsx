@@ -566,6 +566,54 @@ describe("MapView", () => {
       fireEvent.click(screen.getByRole("button", { name: "出発" }));
     }
 
+    describe("兄貴が少し前を歩く（#51）", () => {
+      const anikiAt = () => ({
+        lat: Number(container().getAttribute("data-aniki-lat")),
+        lng: Number(container().getAttribute("data-aniki-lng")),
+      });
+      // ルートは出発点（HERE）から北へ進む。緯度 1° ≒ 111km
+      const NORTH_30M = 30 / 111_000;
+
+      it("ルートがないときは兄貴を地図に出さない", () => {
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        expect(container()).not.toHaveAttribute("data-aniki-lat");
+        expect(container()).not.toHaveAttribute("data-aniki-lng");
+        expect(screen.queryByTestId("aniki-marker")).toBeNull();
+      });
+
+      it("ルートができると、出発点から 30m 先のルート上に兄貴を出す", async () => {
+        fetchMock.mockResolvedValue(routeResponse(200, LOOP_POLYLINE));
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        expect(anikiAt().lat).toBeCloseTo(HERE.lat + NORTH_30M, 5);
+        expect(anikiAt().lng).toBeCloseTo(HERE.lng, 5);
+      });
+
+      it("兄貴のマーカーは、今の場面の表情の画像を出す", async () => {
+        fetchMock.mockResolvedValue(routeResponse(200, LOOP_POLYLINE));
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        // ルートができた場面（found）は笑顔。吹き出しの兄貴と同じ表情
+        expect(
+          screen.getByTestId("aniki-marker").getAttribute("src"),
+        ).toContain(encodeURIComponent("/aniki/smile.png"));
+      });
+
+      it("散歩中に進むと、兄貴も歩いた距離 + 30m の位置へ進む", async () => {
+        await startWalk();
+        // 北へ約 222m 進む
+        const ahead = { lat: HERE.lat + 0.002, lng: HERE.lng };
+        move(ahead);
+        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_30M, 5);
+        // 止まっていれば兄貴も待つ
+        move(ahead);
+        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_30M, 5);
+      });
+    });
+
     it("「出発」を押すと現在地を追いかけ、動くたびに歩いた距離と残りの距離を更新する", async () => {
       await startWalk();
       expect(geo.watchPosition).toHaveBeenCalledTimes(1);

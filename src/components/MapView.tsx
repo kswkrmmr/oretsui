@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   AdvancedMarker,
   APIProvider,
@@ -22,10 +23,15 @@ import {
   pixelToWorldPoint,
   type Point,
 } from "@/lib/long-press";
-import { anikiScene, type AnikiScene } from "@/lib/aniki";
+import {
+  anikiFace,
+  anikiFaceSrc,
+  anikiScene,
+  type AnikiScene,
+} from "@/lib/aniki";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
-import { firstDirection } from "@/lib/route-direction";
+import { anikiPosition, firstDirection } from "@/lib/route-direction";
 import { isOffRoute } from "@/lib/walk-progress";
 import type { LatLng, StartPointState } from "@/lib/start-point";
 
@@ -83,6 +89,14 @@ export function MapView({ apiKey }: Props) {
         "data-start-source": start.source,
       }
     : {};
+  // 兄貴は地図の上で、自分がルート上で歩いた距離の少し先にいる（#51）
+  const aniki = anikiPosition(
+    path,
+    walk.state.status === "walking" ? walk.state.walked : 0,
+  );
+  const anikiAttributes = aniki
+    ? { "data-aniki-lat": aniki.lat, "data-aniki-lng": aniki.lng }
+    : {};
   const routeAttributes =
     routeDistance === null ? {} : { "data-route-distance": routeDistance };
 
@@ -98,6 +112,7 @@ export function MapView({ apiKey }: Props) {
       className="fixed inset-0 h-dvh w-full"
       {...startAttributes}
       {...routeAttributes}
+      {...anikiAttributes}
     >
       {apiKey ? (
         <>
@@ -128,6 +143,18 @@ export function MapView({ apiKey }: Props) {
                 </AdvancedMarker>
               )}
               {path.length > 0 && <RouteLine path={path} />}
+              {aniki && (
+                <AdvancedMarker position={aniki} title="兄貴" zIndex={10}>
+                  <Image
+                    data-testid="aniki-marker"
+                    src={anikiFaceSrc(anikiFace(scene ?? "found"))}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 rounded-full border-2 border-white bg-[#f9f3e4] object-cover shadow-lg"
+                  />
+                </AdvancedMarker>
+              )}
             </Map>
           </APIProvider>
           {state.showNotice && (
