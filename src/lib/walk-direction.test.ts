@@ -4,6 +4,7 @@ import {
   DECIDE_WITHIN_M,
   initialWalkDirection,
   nextWalkDirection,
+  REVERSE_CLOSER_M,
   REVERSE_LEAD_M,
 } from "./walk-direction";
 
@@ -58,8 +59,9 @@ describe("テスト用のルート", () => {
 });
 
 describe("逆回りの判定（#52、#60 で「差」に変更）", () => {
-  it("決めた値のまま（逆回りが順回りより 30m 多い・最初の 300m）", () => {
+  it("決めた値のまま（逆回りが順回りより 30m 多い・逆回りの点が 10m 以上近い・最初の 300m）", () => {
     expect(REVERSE_LEAD_M).toBe(30);
+    expect(REVERSE_CLOSER_M).toBe(10);
     expect(DECIDE_WITHIN_M).toBe(300);
   });
 
@@ -159,5 +161,34 @@ describe("最初の道を行きと帰りで共有するルート（#60：実際�
     ]);
     expect(state.reversed).toBe(false);
     expect(state.walked).toBeCloseTo(100, -1);
+  });
+});
+
+describe("帰り道が隣の筋を平行に通るルート（#60 のレビューで見つかった誤判定）", () => {
+  // 北へ200m → 東へ width → 南へ200m → 西へ width で出発点に戻る細長い周回
+  const narrowLoop = (width: number) => [
+    START,
+    north(200),
+    east(width, north(200)),
+    east(width),
+    START,
+  ];
+
+  it.each([30, 40, 60])(
+    "隣の筋が %im 離れていても、順回りの道を北へ歩けば切り替えない",
+    (width) => {
+      const positions = Array.from({ length: 30 }, (_, i) =>
+        north(5 * (i + 1)),
+      );
+      const state = walkThrough(narrowLoop(width), positions);
+      expect(state.reversed).toBe(false);
+      expect(state.walked).toBeCloseTo(150, -1);
+    },
+  );
+
+  it("出発点から逆回りの道（東）へ歩けば切り替える", () => {
+    // 逆回りは出発点から東へ width 進んでから北へ向かう。東へ 40m 進むと逆回りの道の上
+    const state = walkThrough(narrowLoop(60), [east(20), east(40)]);
+    expect(state.reversed).toBe(true);
   });
 });
