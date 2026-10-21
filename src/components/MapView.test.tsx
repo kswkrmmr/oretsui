@@ -89,10 +89,10 @@ const geo = {
 };
 
 /** 散歩中、現在地が動いたことにする */
-function move(position: { lat: number; lng: number }) {
+function move(position: { lat: number; lng: number }, accuracy?: number) {
   act(() =>
     geo.watchPosition.mock.lastCall![0]({
-      coords: { latitude: position.lat, longitude: position.lng },
+      coords: { latitude: position.lat, longitude: position.lng, accuracy },
     } as GeolocationPosition),
   );
 }
@@ -771,6 +771,30 @@ describe("MapView", () => {
       );
       move({ lat: 35.6915, lng: 139.6917 });
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    describe("外れの判定に GPS の精度を使う（#53）", () => {
+      // ルートの最初の区間（出発点から北へ）の途中から、西へ約 30m（隣の道を歩いている想定）
+      const nextStreet = { lat: 35.6915, lng: 139.6917 - 30 / 90_300 };
+
+      it("精度が良い（10m）ときは、30m 離れた位置が2回続くと外れを知らせる", async () => {
+        await startWalk();
+        move(HERE, 10);
+        move(nextStreet, 10);
+        expect(screen.queryByRole("alert")).toBeNull();
+        move(nextStreet, 10);
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          "ルートから外れています",
+        );
+      });
+
+      it("精度が悪い（40m）ときは、30m 離れても外れにしない", async () => {
+        await startWalk();
+        move(HERE, 40);
+        move(nextStreet, 40);
+        move(nextStreet, 40);
+        expect(screen.queryByRole("alert")).toBeNull();
+      });
     });
 
     it("「出発」で画面のスリープ防止を取得し、「終了」で解放する", async () => {
