@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { compassName, firstDirection, pointAlong } from "./route-direction";
+import {
+  ANIKI_LEAD_M,
+  anikiPosition,
+  compassName,
+  firstDirection,
+  pointAlong,
+} from "./route-direction";
 import { distanceBetween } from "./loop-route";
 
 // 北緯35度付近。緯度 0.001° ≒ 111m、経度 0.001° ≒ 91m
@@ -98,5 +104,27 @@ describe("firstDirection", () => {
   it("点が1つ以下なら方角は分からない", () => {
     expect(firstDirection([A])).toBeNull();
     expect(firstDirection([])).toBeNull();
+  });
+});
+
+describe("anikiPosition（#51）", () => {
+  it("歩いた距離 + 30m のルート上の点になる", () => {
+    expect(ANIKI_LEAD_M).toBe(30);
+    // まだ歩いていなければ、出発点から 30m 先
+    expect(anikiPosition(PATH, 0)).toEqual(pointAlong(PATH, 30));
+    expect(distanceBetween(A, anikiPosition(PATH, 0)!)).toBeCloseTo(30, 0);
+    // 100m 歩いたら、130m 先（曲がった後の区間）
+    expect(anikiPosition(PATH, 100)).toEqual(pointAlong(PATH, 130));
+  });
+
+  it("全長に近いときは終点で止まる", () => {
+    const total = distanceBetween(A, B) + distanceBetween(B, C);
+    expect(anikiPosition(PATH, total - 10)).toEqual(C);
+    expect(anikiPosition(PATH, total)).toEqual(C);
+  });
+
+  it("ルートがないときは兄貴を出さない（null）", () => {
+    expect(anikiPosition([], 0)).toBeNull();
+    expect(anikiPosition([A], 0)).toBeNull();
   });
 });
