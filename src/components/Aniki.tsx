@@ -1,13 +1,22 @@
 import Image from "next/image";
 import {
-  ANIKI_LINES,
   anikiFace,
   anikiFaceSrc,
+  anikiLine,
   type AnikiScene,
 } from "@/lib/aniki";
 
-/** 兄貴の顔と吹き出し（#41）。顔は場面に合わせて表情を変える（#47） */
-export function Aniki({ scene }: { scene: AnikiScene }) {
+/**
+ * 兄貴の顔と吹き出し（#41）。顔は場面に合わせて表情を変える（#47）。
+ * direction はルートの最初の方角。ルートができたときのセリフに入れる（#50）
+ */
+export function Aniki({
+  scene,
+  direction = null,
+}: {
+  scene: AnikiScene;
+  direction?: string | null;
+}) {
   return (
     <div className="flex min-w-0 flex-1 items-end gap-2">
       {/* 背景は画像（normal・smile）の背景と同じクリーム色。透明な画像でも表情で背景が変わらないように */}
@@ -23,7 +32,7 @@ export function Aniki({ scene }: { scene: AnikiScene }) {
         aria-live="polite"
         className="relative min-w-0 flex-1 rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-sm font-bold text-neutral-900 shadow-lg"
       >
-        {ANIKI_LINES[scene]}
+        {anikiLine(scene, direction)}
       </p>
     </div>
   );

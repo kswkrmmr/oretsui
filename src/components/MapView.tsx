@@ -25,6 +25,7 @@ import {
 import { anikiScene, type AnikiScene } from "@/lib/aniki";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
+import { firstDirection } from "@/lib/route-direction";
 import { isOffRoute } from "@/lib/walk-progress";
 import type { LatLng, StartPointState } from "@/lib/start-point";
 
@@ -142,7 +143,7 @@ export function MapView({ apiKey }: Props) {
             <div className="flex w-full items-end gap-3 px-4">
               {scene ? (
                 <div className="pointer-events-auto flex min-w-0 flex-1">
-                  <Aniki scene={scene} />
+                  <Aniki scene={scene} direction={firstDirection(path)} />
                 </div>
               ) : (
                 <div className="flex-1" />
@@ -236,6 +237,20 @@ function RouteLine({ path }: { path: LatLng[] }) {
       strokeColor: "#16a34a",
       strokeOpacity: 0.9,
       strokeWeight: 6,
+      // 進む向きの矢印（#50）。画面上の間隔で並べるので、ズームしても詰まらない
+      icons: [
+        {
+          icon: {
+            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            scale: 3,
+            strokeColor: "#ffffff",
+            strokeWeight: 1,
+            fillColor: "#ffffff",
+            fillOpacity: 1,
+          },
+          repeat: "80px",
+        },
+      ],
     });
     const bounds = new google.maps.LatLngBounds();
     for (const point of path) bounds.extend(point);
