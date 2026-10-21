@@ -4,6 +4,7 @@ import {
   ANIKI_LINES,
   anikiFace,
   anikiFaceSrc,
+  anikiLine,
   anikiScene,
   nextWalkTalk,
   startWalkTalk,
@@ -183,5 +184,22 @@ describe("兄貴の表情（#47）", () => {
     expect(anikiFaceSrc("smile")).toBe("/aniki/smile.png");
     expect(anikiFaceSrc("fired-up")).toBe("/aniki/fired-up.png");
     expect(anikiFaceSrc("troubled")).toBe("/aniki/troubled.png");
+  });
+});
+
+describe("anikiLine（#50）", () => {
+  it("ルートができたとき、最初の方角を入れて言う", () => {
+    expect(anikiLine("found", "北東")).toBe(
+      "いい道を見つけたぞ。まずは北東へ行くぞ、俺についてこい！",
+    );
+  });
+
+  it("方角が分からないときは、これまでのセリフのまま", () => {
+    expect(anikiLine("found", null)).toBe(ANIKI_LINES.found);
+  });
+
+  it("ほかの場面は方角があってもセリフを変えない", () => {
+    expect(anikiLine("ready", "北")).toBe(ANIKI_LINES.ready);
+    expect(anikiLine("start", "北")).toBe(ANIKI_LINES.start);
   });
 });

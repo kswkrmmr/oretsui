@@ -33,7 +33,11 @@ const mocks = vi.hoisted(() => {
     fitBounds,
     div,
     // 地図に描いたルートの線（google.maps.Polyline に渡した設定）
-    polylines: [] as { path: unknown; setMap: ReturnType<typeof vi.fn> }[],
+    polylines: [] as {
+      path: unknown;
+      icons?: unknown;
+      setMap: ReturnType<typeof vi.fn>;
+    }[],
     // 本物と同じく、同じ地図には同じオブジェクトを返す。中心は北緯30度・東経100度、ズーム0
     map: {
       panTo,
@@ -174,10 +178,11 @@ describe("MapView", () => {
         },
         Polyline: class {
           setMap = vi.fn();
-          constructor({ path }: { path: unknown }) {
-            mocks.polylines.push({ path, setMap: this.setMap });
+          constructor({ path, icons }: { path: unknown; icons?: unknown }) {
+            mocks.polylines.push({ path, icons, setMap: this.setMap });
           }
         },
+        SymbolPath: { FORWARD_CLOSED_ARROW: 1 },
         LatLngBounds: class {
           points: unknown[] = [];
           extend(point: unknown) {
@@ -355,6 +360,35 @@ describe("MapView", () => {
       fireEvent.click(screen.getByRole("button", { name: "別のルート" }));
     });
     expect(mocks.polylines[0].setMap).toHaveBeenCalledWith(null);
+  });
+
+  it("ルートの線に、進む向きの矢印を一定間隔で並べる（#50）", async () => {
+    fetchMock.mockResolvedValue(routeResponse());
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    expect(mocks.polylines[0].icons).toEqual([
+      {
+        icon: expect.objectContaining({
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 3,
+          fillColor: "#ffffff",
+          fillOpacity: 1,
+        }),
+        repeat: "80px",
+      },
+    ]);
+  });
+
+  it("ルートができると、兄貴が最初の方角を言う（#50）", async () => {
+    // 出発点から北へ進んでから東へ曲がり、出発点へ戻る三角形
+    fetchMock.mockResolvedValue(routeResponse(200, LOOP_POLYLINE));
+    render(<MapView apiKey="test-key" />);
+    succeed();
+    await generateRoute();
+    expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+      "いい道を見つけたぞ。まずは北へ行くぞ、俺についてこい！",
+    );
   });
 
   it("生成に失敗するとエラーと再試行ボタンを出し、再試行で同じ条件で作り直す", async () => {
