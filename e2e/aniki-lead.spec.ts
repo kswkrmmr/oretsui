@@ -13,8 +13,8 @@ const LOOP_ROUTE = {
   waypoints: [],
   withinTolerance: true,
 };
-// 緯度 1° ≒ 111km。ルートは北へ進むので、30m 先は緯度だけ増える
-const NORTH_30M = 30 / 111_000;
+// 緯度 1° ≒ 111km。ルートは北へ進むので、10m 先は緯度だけ増える
+const NORTH_10M = 10 / 111_000;
 
 /** 地図の入れ物に出した兄貴の位置（属性がなければ null） */
 const anikiAt = (page: Page) =>
@@ -36,7 +36,7 @@ test.beforeEach(async ({ page, context }) => {
   await context.setGeolocation(HERE);
 });
 
-test("ルートを作ると、兄貴が出発点から約30m先のルート上に出る", async ({
+test("ルートを作ると、兄貴が出発点から約10m先のルート上に出る", async ({
   page,
 }) => {
   await page.goto("/");
@@ -49,7 +49,7 @@ test("ルートを作ると、兄貴が出発点から約30m先のルート上�
   await page.getByRole("button", { name: "ルートを作る" }).click();
   await expect.poll(() => anikiAt(page)).not.toBeNull();
   const aniki = (await anikiAt(page))!;
-  expect(aniki.lat).toBeCloseTo(HERE.latitude + NORTH_30M, 5);
+  expect(aniki.lat).toBeCloseTo(HERE.latitude + NORTH_10M, 5);
   expect(aniki.lng).toBeCloseTo(HERE.longitude, 5);
 });
 
@@ -71,6 +71,6 @@ test("散歩中に位置を進めると、兄貴も先へ進む", async ({ page,
     "歩いた 222 m / 残り 1.3 km",
   );
   const aniki = (await anikiAt(page))!;
-  expect(aniki.lat).toBeCloseTo(35.6915 + NORTH_30M, 5);
+  expect(aniki.lat).toBeCloseTo(35.6915 + NORTH_10M, 5);
   expect(aniki.lng).toBeCloseTo(139.6917, 5);
 });

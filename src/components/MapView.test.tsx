@@ -387,14 +387,14 @@ describe("MapView", () => {
     ]);
   });
 
-  it("ルートができると、兄貴が最初の方角を言う（#50）", async () => {
+  it("ルートができると、兄貴は方角を言わずに「俺についてこい」と言う（#59）", async () => {
     // 出発点から北へ進んでから東へ曲がり、出発点へ戻る三角形
     fetchMock.mockResolvedValue(routeResponse(200, LOOP_POLYLINE));
     render(<MapView apiKey="test-key" />);
     succeed();
     await generateRoute();
     expect(screen.getByTestId("aniki-line")).toHaveTextContent(
-      "いい道を見つけたぞ。まずは北へ行くぞ、俺についてこい！",
+      "いい道を見つけたぞ。俺についてこい！",
     );
   });
 
@@ -599,9 +599,9 @@ describe("MapView", () => {
         expect(screen.getByTestId("aniki-line")).toHaveTextContent(
           "そっちか！ならこっちだ、俺についてこい！",
         );
-        // 兄貴は東へ 45m + 30m の位置
+        // 兄貴は東へ 45m + 10m の位置
         expect(Number(container().getAttribute("data-aniki-lng"))).toBeCloseTo(
-          east(75).lng,
+          east(55).lng,
           5,
         );
         expect(Number(container().getAttribute("data-aniki-lat"))).toBeCloseTo(
@@ -632,7 +632,7 @@ describe("MapView", () => {
         lng: Number(container().getAttribute("data-aniki-lng")),
       });
       // ルートは出発点（HERE）から北へ進む。緯度 1° ≒ 111km
-      const NORTH_30M = 30 / 111_000;
+      const NORTH_10M = 10 / 111_000;
 
       it("ルートがないときは兄貴を地図に出さない", () => {
         render(<MapView apiKey="test-key" />);
@@ -642,12 +642,12 @@ describe("MapView", () => {
         expect(screen.queryByTestId("aniki-marker")).toBeNull();
       });
 
-      it("ルートができると、出発点から 30m 先のルート上に兄貴を出す", async () => {
+      it("ルートができると、出発点から 10m 先のルート上に兄貴を出す", async () => {
         fetchMock.mockResolvedValue(routeResponse(200, LOOP_POLYLINE));
         render(<MapView apiKey="test-key" />);
         succeed();
         await generateRoute();
-        expect(anikiAt().lat).toBeCloseTo(HERE.lat + NORTH_30M, 5);
+        expect(anikiAt().lat).toBeCloseTo(HERE.lat + NORTH_10M, 5);
         expect(anikiAt().lng).toBeCloseTo(HERE.lng, 5);
       });
 
@@ -662,15 +662,15 @@ describe("MapView", () => {
         ).toContain(encodeURIComponent("/aniki/smile.png"));
       });
 
-      it("散歩中に進むと、兄貴も歩いた距離 + 30m の位置へ進む", async () => {
+      it("散歩中に進むと、兄貴も歩いた距離 + 10m の位置へ進む", async () => {
         await startWalk();
         // 北へ約 222m 進む
         const ahead = { lat: HERE.lat + 0.002, lng: HERE.lng };
         move(ahead);
-        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_30M, 5);
+        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_10M, 5);
         // 止まっていれば兄貴も待つ
         move(ahead);
-        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_30M, 5);
+        expect(anikiAt().lat).toBeCloseTo(ahead.lat + NORTH_10M, 5);
       });
     });
 
