@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDistance, formatDuration } from "./format";
+import { formatDistance, formatDuration, formatElapsed } from "./format";
 
 describe("formatDistance", () => {
   it("1km未満はメートルで表示する", () => {
@@ -32,5 +32,22 @@ describe("formatDuration", () => {
   it("秒は四捨五入して分にする", () => {
     expect(formatDuration(89)).toBe("1分");
     expect(formatDuration(90)).toBe("2分");
+  });
+});
+
+describe("formatElapsed（#68）", () => {
+  it("1時間未満は 分:秒", () => {
+    expect(formatElapsed(0)).toBe("0:00");
+    expect(formatElapsed(65)).toBe("1:05");
+    expect(formatElapsed(59 * 60 + 59)).toBe("59:59");
+  });
+
+  it("1時間以上は 時:分:秒", () => {
+    expect(formatElapsed(3600)).toBe("1:00:00");
+    expect(formatElapsed(3723)).toBe("1:02:03");
+  });
+
+  it("秒の端数は切り捨てる", () => {
+    expect(formatElapsed(65.9)).toBe("1:05");
   });
 });

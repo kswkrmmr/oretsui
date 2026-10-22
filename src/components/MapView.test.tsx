@@ -573,6 +573,75 @@ describe("MapView", () => {
       fireEvent.click(screen.getByRole("button", { name: "出発" }));
     }
 
+    describe("経過時間と終了したときのまとめ（#68）", () => {
+      // 時計だけを偽物にする（Promise やルート作成の処理はそのまま動かす）
+      beforeEach(() => {
+        vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      });
+      const tick = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+      const elapsed = () => screen.getByTestId("walk-elapsed");
+
+      it("出発すると経過時間が 0:00 から増えていく", async () => {
+        await startWalk();
+        expect(elapsed()).toHaveTextContent("0:00");
+        tick(65_000);
+        expect(elapsed()).toHaveTextContent("1:05");
+      });
+
+      it("位置を取得できなくなっても、経過時間は増え続ける", async () => {
+        await startWalk();
+        tick(10_000);
+        act(() =>
+          geo.watchPosition.mock.lastCall![1]({
+            code: 1,
+            message: "",
+            PERMISSION_DENIED: 1,
+          } as GeolocationPositionError),
+        );
+        expect(screen.getByText("現在地を取得できません")).toBeInTheDocument();
+        tick(20_000);
+        expect(elapsed()).toHaveTextContent("0:30");
+      });
+
+      it("終了すると「今日の散歩 ○分・○ m」を出し、次の操作で消える", async () => {
+        await startWalk();
+        move(HERE);
+        // 北へ約 222m
+        move({ lat: HERE.lat + 0.002, lng: HERE.lng });
+        tick(120_000);
+        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        expect(screen.getByTestId("walk-summary")).toHaveTextContent(
+          "今日の散歩 2分・222 m",
+        );
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "別のルート" }));
+        });
+        expect(screen.queryByTestId("walk-summary")).toBeNull();
+      });
+
+      it.each(["条件を変える", "出発"])(
+        "終了したあと「%s」を押しても、まとめは消える",
+        async (button) => {
+          await startWalk();
+          tick(60_000);
+          fireEvent.click(screen.getByRole("button", { name: "終了" }));
+          expect(screen.getByTestId("walk-summary")).toBeInTheDocument();
+          fireEvent.click(screen.getByRole("button", { name: button }));
+          expect(screen.queryByTestId("walk-summary")).toBeNull();
+        },
+      );
+
+      it("散歩中でないときは経過時間を出さない", async () => {
+        fetchMock.mockImplementation(async () =>
+          routeResponse(200, LOOP_POLYLINE),
+        );
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        expect(screen.queryByTestId("walk-elapsed")).toBeNull();
+      });
+    });
+
     describe("位置の更新を受け取った回数（#66、E2E 用）", () => {
       it("散歩中、位置の更新を受け取るたびに data-walk-updates が 0 → 1 → 2 と増える", async () => {
         await startWalk();

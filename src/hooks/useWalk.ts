@@ -32,6 +32,9 @@ export type WalkState =
     }
   | { status: "unavailable" };
 
+/** 終えた散歩の記録（#68） */
+export type WalkRecord = { seconds: number; meters: number };
+
 /** 散歩中に現在地を追いかけるときの設定。古い位置は使わない */
 const WATCH_OPTIONS: PositionOptions = {
   enableHighAccuracy: true,
@@ -45,15 +48,32 @@ export function useWalk(path: LatLng[]) {
   const watchId = useRef<number | null>(null);
   const total = cumulativeDistances(path).at(-1) ?? 0;
 
-  const stop = useCallback(() => {
+  // 出発した時刻（#68）。位置が取れなくなっても時間は計り続ける
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  // 最後に分かった歩いた距離。位置が取れなくなったあとに終了しても、まとめに使う
+  const lastWalked = useRef(0);
+  useEffect(() => {
+    if (state.status === "walking") lastWalked.current = state.walked;
+  }, [state]);
+
+  /** 散歩を終える。出発していれば、今回の散歩の経過時間（秒）と歩いた距離（m）を返す */
+  const stop = useCallback((): WalkRecord | null => {
     if (watchId.current !== null) {
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
     setState({ status: "idle" });
-  }, []);
+    setStartedAt(null);
+    if (startedAt === null) return null;
+    return {
+      seconds: (Date.now() - startedAt) / 1000,
+      meters: lastWalked.current,
+    };
+  }, [startedAt]);
 
   const start = useCallback(() => {
+    setStartedAt(Date.now());
+    lastWalked.current = 0;
     if (!navigator.geolocation) {
       setState({ status: "unavailable" });
       return;
@@ -128,5 +148,5 @@ export function useWalk(path: LatLng[]) {
     [path, reversed],
   );
 
-  return { state, total, start, stop, reversed, activePath };
+  return { state, total, start, stop, reversed, activePath, startedAt };
 }
