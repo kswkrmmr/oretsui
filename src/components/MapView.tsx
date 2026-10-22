@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Aniki } from "@/components/Aniki";
 import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
+import { useDeviceHeading } from "@/hooks/useDeviceHeading";
 import { useStartPoint } from "@/hooks/useStartPoint";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useWalk, type WalkRecord, type WalkState } from "@/hooks/useWalk";
@@ -32,6 +33,7 @@ import {
 } from "@/lib/aniki";
 import { walkingSeconds, type WalkSpeed } from "@/lib/walk-conditions";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
+import { shouldRotate } from "@/lib/heading";
 import { decodePolyline } from "@/lib/polyline";
 import { anikiPosition } from "@/lib/route-direction";
 import { isOffRoute } from "@/lib/walk-progress";
@@ -61,6 +63,14 @@ export function MapView({ apiKey }: Props) {
   );
   const walk = useWalk(path);
   const walking = walk.state.status !== "idle";
+  // 散歩中の地図の向き（#69）。出発したら「向いている方角が上」、ボタンで「北が上」と切り替える
+  const [headingMode, setHeadingMode] = useState<"device" | "north">("device");
+  const deviceHeading = useDeviceHeading(walking);
+  const rotateMap =
+    walking && headingMode === "device" && deviceHeading.status === "ok";
+  // 方角が分からない（許可なし・センサーなし・届かない）ときは北を上にし、案内を出す。回せないので方位のボタンは出さない
+  const headingUnavailable = walking && deviceHeading.status === "unavailable";
+  const headingNotice = headingUnavailable && headingMode === "device";
   // 散歩中は画面をスリープさせない（#36）
   useWakeLock(walking);
   // 散歩中は地図を現在地に追従させる。指で地図を動かしたらやめ、「現在地に戻る」で再開する
@@ -112,6 +122,11 @@ export function MapView({ apiKey }: Props) {
     walk.state.status === "walking"
       ? { "data-walk-updates": walk.state.updates }
       : {};
+  // 地図の向きの設定（#69、E2E 用）。散歩中だけ出す
+  // 地図の向きのモード（#69、E2E 用）。方角が分からないときは北が上（north）
+  const headingAttributes = walking
+    ? { "data-heading-mode": headingUnavailable ? "north" : headingMode }
+    : {};
   const routeAttributes =
     routeDistance === null ? {} : { "data-route-distance": routeDistance };
 
@@ -129,6 +144,7 @@ export function MapView({ apiKey }: Props) {
       {...routeAttributes}
       {...anikiAttributes}
       {...walkAttributes}
+      {...headingAttributes}
     >
       {apiKey ? (
         <>
@@ -143,6 +159,9 @@ export function MapView({ apiKey }: Props) {
               onDragstart={() => setFollowing(false)}
             >
               <CenterController request={state.centerRequest} />
+              <HeadingController
+                heading={rotateMap ? deviceHeading.heading : null}
+              />
               <LongPressHandler onLongPress={longPress} />
               {following && <FollowController position={walkPosition} />}
               {currentDot && (
@@ -193,6 +212,35 @@ export function MapView({ apiKey }: Props) {
               ) : (
                 <div className="flex-1" />
               )}
+              {walking && !headingUnavailable && (
+                <button
+                  type="button"
+                  aria-label={
+                    headingMode === "device"
+                      ? "北を上にする"
+                      : "向いている方角を上にする"
+                  }
+                  onClick={() =>
+                    setHeadingMode((mode) =>
+                      mode === "device" ? "north" : "device",
+                    )
+                  }
+                  className="pointer-events-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white shadow-lg active:bg-neutral-100"
+                >
+                  {/* 北の印。地図を回しているときは、地図の北の向きに合わせて回す */}
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="h-7 w-7"
+                    style={{
+                      transform: `rotate(${rotateMap ? -(deviceHeading.heading ?? 0) : 0}deg)`,
+                    }}
+                  >
+                    <path d="M12 2l4 10h-8z" className="fill-red-600" />
+                    <path d="M12 22l-4-10h8z" className="fill-neutral-400" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="button"
                 aria-label="現在地に戻る"
@@ -224,12 +272,16 @@ export function MapView({ apiKey }: Props) {
                     total={walk.total}
                     speed={routeSpeed}
                     startedAt={walk.startedAt}
+                    headingNotice={headingNotice}
                     lastWalk={
                       finished && route.status === "done" ? lastWalk : null
                     }
                     onStartWalk={() => {
                       setLastWalk(null);
                       setFollowing(true);
+                      setHeadingMode("device");
+                      // iPhone はタップの直後でないと方角の許可を求められない（#69）
+                      void deviceHeading.requestPermission();
                       walk.start();
                     }}
                     onStopWalk={() => {
@@ -339,6 +391,7 @@ function RouteStatus({
   total,
   speed,
   startedAt,
+  headingNotice,
   lastWalk,
   onStartWalk,
   onStopWalk,
@@ -352,6 +405,7 @@ function RouteStatus({
   total: number;
   speed: WalkSpeed;
   startedAt: number | null;
+  headingNotice: boolean;
   lastWalk: WalkRecord | null;
   onStartWalk: () => void;
   onStopWalk: () => void;
@@ -368,6 +422,11 @@ function RouteStatus({
             className="rounded-lg bg-amber-100 py-2 text-center text-sm font-bold text-amber-900"
           >
             ルートから外れています
+          </p>
+        )}
+        {headingNotice && (
+          <p className="text-center text-xs text-neutral-600">
+            向いている方角が分からないので、北を上にしています
           </p>
         )}
         {walk.status === "walking" ? (
@@ -594,4 +653,27 @@ function WalkElapsed({ startedAt }: { startedAt: number }) {
       </strong>
     </p>
   );
+}
+
+/**
+ * 地図の向きを変える（#69）。heading が null なら北を上（0°）にする。
+ * ふらつきを抑えるため、前回回したときから 5° 以上変わったときだけ回す
+ */
+function HeadingController({ heading }: { heading: number | null }) {
+  const map = useMap();
+  const applied = useRef(0);
+  useEffect(() => {
+    if (!map) return;
+    const target = heading ?? 0;
+    if (heading === null) {
+      if (applied.current !== 0) map.setHeading(0);
+      applied.current = 0;
+      return;
+    }
+    if (shouldRotate(applied.current, target)) {
+      map.setHeading(target);
+      applied.current = target;
+    }
+  }, [map, heading]);
+  return null;
 }
