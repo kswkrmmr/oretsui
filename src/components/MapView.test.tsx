@@ -47,6 +47,8 @@ const mocks = vi.hoisted(() => {
       getProjection: () => projection,
       getCenter: () => ({ lat: () => 30, lng: () => 100 }),
       getZoom: () => 0,
+      // 地図の向き（#69）
+      setHeading: vi.fn(),
     },
   };
 });
@@ -657,6 +659,105 @@ describe("MapView", () => {
       await generateRoute();
       fireEvent.click(screen.getByRole("button", { name: "出発" }));
     }
+
+    describe("向いている方角を上にして地図を回す（#69）", () => {
+      const setHeading = () => mocks.map.setHeading as ReturnType<typeof vi.fn>;
+      const requestPermission = vi.fn<() => Promise<PermissionState>>();
+
+      /** iPhone のコンパスの向き（webkitCompassHeading）が届いたことにする */
+      function compass(heading: number) {
+        const event = new Event("deviceorientation");
+        Object.assign(event, { webkitCompassHeading: heading, alpha: null });
+        act(() => {
+          window.dispatchEvent(event);
+        });
+      }
+
+      beforeEach(() => {
+        setHeading().mockClear();
+        requestPermission.mockReset().mockResolvedValue("granted");
+        // iPhone の Safari と同じく、許可を求める関数を持つ DeviceOrientationEvent
+        vi.stubGlobal(
+          "DeviceOrientationEvent",
+          Object.assign(class {}, { requestPermission }),
+        );
+      });
+
+      async function startWalkWithCompass() {
+        fetchMock.mockImplementation(async () =>
+          routeResponse(200, LOOP_POLYLINE),
+        );
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        await act(async () => {
+          fireEvent.click(screen.getByRole("button", { name: "出発" }));
+        });
+      }
+
+      it("出発すると許可を求め、「向いている方角が上」になり、方角が届くと地図が回る", async () => {
+        await startWalkWithCompass();
+        expect(requestPermission).toHaveBeenCalledTimes(1);
+        expect(container()).toHaveAttribute("data-heading-mode", "device");
+        compass(90);
+        expect(setHeading()).toHaveBeenLastCalledWith(90);
+      });
+
+      it("5° 未満の小さな変化では地図を回さない", async () => {
+        await startWalkWithCompass();
+        compass(90);
+        setHeading().mockClear();
+        compass(93);
+        expect(setHeading()).not.toHaveBeenCalled();
+      });
+
+      it("ボタンで「北が上」に切り替えると向きが 0° に戻り、方角が届いても回らない。もう一度押すと戻る", async () => {
+        await startWalkWithCompass();
+        compass(90);
+        fireEvent.click(screen.getByRole("button", { name: "北を上にする" }));
+        expect(container()).toHaveAttribute("data-heading-mode", "north");
+        expect(setHeading()).toHaveBeenLastCalledWith(0);
+        setHeading().mockClear();
+        compass(180);
+        expect(setHeading()).not.toHaveBeenCalled();
+        fireEvent.click(
+          screen.getByRole("button", { name: "向いている方角を上にする" }),
+        );
+        expect(container()).toHaveAttribute("data-heading-mode", "device");
+        compass(180);
+        expect(setHeading()).toHaveBeenCalled();
+      });
+
+      it("許可がないときは「北が上」のままにし、案内を出す。回せないので方位のボタンは出さない", async () => {
+        requestPermission.mockResolvedValue("denied");
+        await startWalkWithCompass();
+        expect(
+          screen.getByText(
+            "向いている方角が分からないので、北を上にしています",
+          ),
+        ).toBeInTheDocument();
+        expect(container()).toHaveAttribute("data-heading-mode", "north");
+        expect(
+          screen.queryByRole("button", { name: "北を上にする" }),
+        ).toBeNull();
+        expect(
+          screen.queryByRole("button", { name: "向いている方角を上にする" }),
+        ).toBeNull();
+        compass(90);
+        expect(setHeading()).not.toHaveBeenCalledWith(90);
+      });
+
+      it("終了すると地図の向きを 0° に戻し、ボタンを消す", async () => {
+        await startWalkWithCompass();
+        compass(90);
+        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        expect(setHeading()).toHaveBeenLastCalledWith(0);
+        expect(
+          screen.queryByRole("button", { name: "北を上にする" }),
+        ).toBeNull();
+        expect(container()).not.toHaveAttribute("data-heading-mode");
+      });
+    });
 
     describe("経過時間と終了したときのまとめ（#68）", () => {
       // 時計だけを偽物にする（Promise やルート作成の処理はそのまま動かす）
