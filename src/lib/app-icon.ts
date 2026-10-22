@@ -16,5 +16,3 @@ export const APP_ICONS: AppIcon[] = [
   // iPhone のホーム画面用（apple-touch-icon）
   { file: "apple-touch-icon.png", size: 180, purpose: "any" },
 ];
-
-export const APPLE_TOUCH_ICON = "/icons/apple-touch-icon.png";

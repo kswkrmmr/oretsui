@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { APPLE_TOUCH_ICON, THEME_COLOR } from "@/lib/app-icon";
+import { THEME_COLOR } from "@/lib/app-icon";
+import { iconUrl } from "@/lib/icon-url";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,7 +12,8 @@ export const metadata: Metadata = {
     title: "俺つい",
     statusBarStyle: "default",
   },
-  icons: { apple: APPLE_TOUCH_ICON },
+  // manifest のアイコンと同じく、版を付ける（#86）
+  icons: { apple: iconUrl("apple-touch-icon.png") },
   // Next.js は mobile-web-app-capable しか出さないので、古い iPhone 用に apple- 版も出す
   other: { "apple-mobile-web-app-capable": "yes" },
 };

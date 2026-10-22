@@ -29,6 +29,9 @@ test("manifest が取得でき、ホーム画面に追加するための必須�
     background_color: "#ffffff",
   });
   const sizes = manifest.icons.map((icon: { sizes: string }) => icon.sizes);
+  // 画像を差し替えたらスマホが取りに行き直すよう、URL に版が付いている（#86）
+  for (const icon of manifest.icons as { src: string }[])
+    expect(icon.src).toMatch(/^\/icons\/[a-z0-9-]+\.png\?v=[0-9a-f]{8}$/);
   expect(sizes).toContain("192x192");
   expect(sizes).toContain("512x512");
   // Android の丸い枠でも切れない maskable 版もある
@@ -67,6 +70,16 @@ test("iPhone の Safari 用のメタタグと apple-touch-icon がページに�
   const href = await page
     .locator('link[rel="apple-touch-icon"]')
     .getAttribute("href");
+  // iPhone 用のアイコンにも、manifest と同じ版が付いている（#86）
+  const manifest = await (
+    await page.request.get(
+      (await page.locator('link[rel="manifest"]').getAttribute("href"))!,
+    )
+  ).json();
+  const version = new URL(manifest.icons[0].src, "http://x").searchParams.get(
+    "v",
+  );
+  expect(href).toBe(`/icons/apple-touch-icon.png?v=${version}`);
   const response = await page.request.get(href!);
   expect(response.ok()).toBe(true);
   expect(response.headers()["content-type"]).toBe("image/png");
