@@ -115,18 +115,24 @@ describe("ルートから外れたことの検知", () => {
   });
 });
 
-describe("外れの基準を GPS の精度に合わせる（#53）", () => {
-  it("基準は「精度 + 15m」を 25m〜50m に収めたもの", () => {
-    expect(offRouteThreshold(5)).toBe(25);
-    expect(offRouteThreshold(10)).toBe(25);
-    expect(offRouteThreshold(20)).toBe(35);
-    expect(offRouteThreshold(35)).toBe(50);
-    expect(offRouteThreshold(45)).toBe(50);
+describe("外れの基準を GPS の精度に合わせる（#53、#61 で厳しく）", () => {
+  it("基準は「精度 + 10m」を 20m〜40m に収めたもの", () => {
+    expect(offRouteThreshold(5)).toBe(20);
+    expect(offRouteThreshold(10)).toBe(20);
+    expect(offRouteThreshold(20)).toBe(30);
+    expect(offRouteThreshold(30)).toBe(40);
+    expect(offRouteThreshold(45)).toBe(40);
   });
 
   it("精度が取れないときは、今までどおり 50m", () => {
     expect(offRouteThreshold(undefined)).toBe(OFF_ROUTE_M);
     expect(offRouteThreshold(Number.NaN)).toBe(OFF_ROUTE_M);
+  });
+
+  it("精度 10m のとき、ルートから 22m 離れた位置が2回続いたら外れになる（#61）", () => {
+    const once = countOffRoute(0, 22, 10);
+    expect(isOffRoute(once)).toBe(false);
+    expect(isOffRoute(countOffRoute(once, 22, 10))).toBe(true);
   });
 
   it("精度 10m のとき、ルートから 30m 離れた位置が2回続いたら外れになる", () => {
