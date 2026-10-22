@@ -9,15 +9,23 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Playwright の公式コンテナで動かす（#81）。ブラウザと OS の部品が入っているので、
+    # インストールの段階がいらない（#79 の CI はこの段階で2回とも止まった）。
+    # バージョンは package.json の @playwright/test と同じにすること。Playwright を上げるときは一緒に上げる
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      # 止まったら早めに失敗させる
       - run: npm ci
-      - run: npx playwright install --with-deps webkit chromium
+        timeout-minutes: 5
       - run: npm run verify
+        timeout-minutes: 12
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
