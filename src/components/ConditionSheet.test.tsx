@@ -27,7 +27,7 @@ describe("ConditionSheet", () => {
     expect(button("30分")).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByText("約6.0km")).toBeInTheDocument();
     generate();
-    expect(onGenerate).toHaveBeenCalledWith(6000);
+    expect(onGenerate).toHaveBeenCalledWith(6000, "fast");
   });
 
   it("「距離」に切り替えると速さの選択が隠れ、選んだ距離で生成処理を呼ぶ", () => {
@@ -38,7 +38,7 @@ describe("ConditionSheet", () => {
     expect(screen.queryByRole("button", { name: "30分" })).toBeNull();
     fireEvent.click(button("3km"));
     generate();
-    expect(onGenerate).toHaveBeenCalledWith(3000);
+    expect(onGenerate).toHaveBeenCalledWith(3000, "normal");
   });
 
   it("モードを切り替えて戻っても、時間の選択は残る", () => {
@@ -49,7 +49,7 @@ describe("ConditionSheet", () => {
     fireEvent.click(button("時間"));
     expect(button("15分")).toHaveAttribute("aria-pressed", "true");
     generate();
-    expect(onGenerate).toHaveBeenCalledWith(1200);
+    expect(onGenerate).toHaveBeenCalledWith(1200, "normal");
   });
 
   it("出発点がないとき（disabled）、「ルートを作る」は押せない", () => {

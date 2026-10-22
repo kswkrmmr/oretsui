@@ -41,6 +41,19 @@ export function targetMeters(conditions: WalkConditions): number {
     : conditions.meters;
 }
 
+/**
+ * ルートの所要時間を計算するときの歩く速さ（#72）。
+ * 時間で選んだときは選んだ速さ、距離で選んだとき（速さを選ばない）は「ふつう」
+ */
+export function durationSpeed(conditions: WalkConditions): WalkSpeed {
+  return conditions.mode === "time" ? conditions.speed : "normal";
+}
+
+/** 距離（m）を歩く速さで歩いたときの所要時間（秒）（#72） */
+export function walkingSeconds(meters: number, speed: WalkSpeed): number {
+  return (meters / WALK_SPEEDS[speed].metersPerMinute) * 60;
+}
+
 /** 距離を「約2.4km」のように 0.1km 単位で表示する */
 export function formatDistance(meters: number): string {
   return `約${(meters / 1000).toFixed(1)}km`;

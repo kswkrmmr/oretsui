@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   DISTANCE_PRESETS,
+  durationSpeed,
   formatDistance,
   INITIAL_CONDITIONS,
   targetMeters,
@@ -15,8 +16,8 @@ import {
 type Props = {
   /** 出発点がないときは「ルートを作る」を押せなくする */
   disabled: boolean;
-  /** 「ルートを作る」を押したときに、目標距離（m）を渡して呼ぶ */
-  onGenerate: (meters: number) => void;
+  /** 「ルートを作る」を押したときに、目標距離（m）と所要時間の計算に使う歩く速さ（#72）を渡して呼ぶ */
+  onGenerate: (meters: number, speed: WalkSpeed) => void;
   /**
    * ルートを作成中・作成後は、条件と「ルートを作る」を隠して status だけを出す。
    * 隠しても選んだ条件は残る
@@ -105,7 +106,7 @@ export function ConditionSheet({
             <button
               type="button"
               disabled={disabled}
-              onClick={() => onGenerate(meters)}
+              onClick={() => onGenerate(meters, durationSpeed(conditions))}
               className="min-h-12 flex-1 rounded-xl bg-green-600 font-bold text-white active:bg-green-700 disabled:bg-neutral-300 disabled:text-neutral-500"
             >
               ルートを作る

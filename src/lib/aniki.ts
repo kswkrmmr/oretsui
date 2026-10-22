@@ -16,7 +16,10 @@ export type AnikiScene =
   | "lost"
   | "finished"
   // 逆向きに歩き出して、逆回りに切り替えたとき（#52）
-  | "reversed";
+  | "reversed"
+  // ルートの長さが目標の ±10% に入らなかったとき（#72）
+  | "longer"
+  | "shorter";
 
 /** 場面ごとのセリフ。文言は issue #41・#42 で人間と決めたもの */
 export const ANIKI_LINES: Record<AnikiScene, string> = {
@@ -33,6 +36,8 @@ export const ANIKI_LINES: Record<AnikiScene, string> = {
   lost: "今どこにいるか分からないな…位置情報を許可してくれるか？",
   finished: "おつかれ！いい散歩だったな",
   reversed: "そっちか！ならこっちだ、俺についてこい！",
+  longer: "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
+  shorter: "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
 };
 
 /** 兄貴の表情（#47）。画像は人間が用意したもの（#46） */
@@ -53,6 +58,8 @@ const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
   failed: "troubled",
   offRoute: "troubled",
   lost: "troubled",
+  longer: "troubled",
+  shorter: "troubled",
 };
 
 export function anikiFace(scene: AnikiScene): AnikiFace {
@@ -70,13 +77,27 @@ export type AnikiInput = {
   routeStatus: LoopRouteState["status"];
   /** 最後のルート作りが「別のルート」だったか */
   another: boolean;
+  /** ルートの長さが目標に合っているか（#72）。省略したら ok */
+  fit?: RouteFit;
 };
+
+/** ルートの長さが目標の ±10% に入ったか。入らなかったら長い・短いのどちらか（#72） */
+export type RouteFit = "ok" | "longer" | "shorter";
+
+export function routeFit(
+  route: { withinTolerance: boolean; distanceMeters: number },
+  targetMeters: number,
+): RouteFit {
+  if (route.withinTolerance) return "ok";
+  return route.distanceMeters > targetMeters ? "longer" : "shorter";
+}
 
 /** アプリの状態から場面を決める。出発点が決まるまでは兄貴を出さない（null） */
 export function anikiScene({
   hasStart,
   routeStatus,
   another,
+  fit = "ok",
 }: AnikiInput): AnikiScene | null {
   if (!hasStart) return null;
   switch (routeStatus) {
@@ -85,6 +106,8 @@ export function anikiScene({
     case "loading":
       return "searching";
     case "done":
+      // 長さがずれたときは「別のルート」でも同じように言う（#72）
+      if (fit !== "ok") return fit;
       return another ? "another" : "found";
     case "error":
       return "failed";

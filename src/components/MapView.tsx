@@ -27,8 +27,10 @@ import {
   anikiFace,
   anikiFaceSrc,
   anikiScene,
+  routeFit,
   type AnikiScene,
 } from "@/lib/aniki";
+import { walkingSeconds, type WalkSpeed } from "@/lib/walk-conditions";
 import { MAP_ID, MAP_OPTIONS } from "@/lib/map-config";
 import { decodePolyline } from "@/lib/polyline";
 import { anikiPosition } from "@/lib/route-direction";
@@ -44,6 +46,8 @@ export function MapView({ apiKey }: Props) {
   const { state, tap, longPress, recenter } = useStartPoint();
   const { start } = state;
   const [routeDistance, setRouteDistance] = useState<number | null>(null);
+  // 所要時間の計算に使う歩く速さ（#72）
+  const [routeSpeed, setRouteSpeed] = useState<WalkSpeed>("normal");
   const { state: route, generate, retry, another } = useLoopRoute();
   // ルートを作ったら条件を隠し、「条件を変える」で戻す。失敗したときは条件も見せる
   const [showConditions, setShowConditions] = useState(true);
@@ -81,6 +85,10 @@ export function MapView({ apiKey }: Props) {
               hasStart: start !== null,
               routeStatus: route.status,
               another: anotherRoute,
+              fit:
+                route.status === "done" && routeDistance !== null
+                  ? routeFit(route.route, routeDistance)
+                  : "ok",
             });
 
   // 地図の外からも出発点と生成の依頼を確かめられるよう、入れ物に出す（E2E 用）
@@ -214,6 +222,7 @@ export function MapView({ apiKey }: Props) {
                     collapsed={collapsed}
                     walk={walk.state}
                     total={walk.total}
+                    speed={routeSpeed}
                     startedAt={walk.startedAt}
                     lastWalk={
                       finished && route.status === "done" ? lastWalk : null
@@ -241,7 +250,8 @@ export function MapView({ apiKey }: Props) {
                     }}
                   />
                 }
-                onGenerate={(meters) => {
+                onGenerate={(meters, speed) => {
+                  setRouteSpeed(speed);
                   setLastWalk(null);
                   setAnotherRoute(false);
                   setRouteDistance(meters);
@@ -327,6 +337,7 @@ function RouteStatus({
   collapsed,
   walk,
   total,
+  speed,
   startedAt,
   lastWalk,
   onStartWalk,
@@ -339,6 +350,7 @@ function RouteStatus({
   collapsed: boolean;
   walk: WalkState;
   total: number;
+  speed: WalkSpeed;
   startedAt: number | null;
   lastWalk: WalkRecord | null;
   onStartWalk: () => void;
@@ -399,7 +411,8 @@ function RouteStatus({
         </strong>
         ・約
         <strong className="text-base">
-          {formatDuration(state.route.durationSeconds)}
+          {/* Routes API の時間ではなく、選んだ歩く速さで計算する（#72） */}
+          {formatDuration(walkingSeconds(state.route.distanceMeters, speed))}
         </strong>
       </p>
     );

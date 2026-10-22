@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  durationSpeed,
   formatDistance,
   INITIAL_CONDITIONS,
   minutesToMeters,
   targetMeters,
+  walkingSeconds,
 } from "./walk-conditions";
 
 describe("minutesToMeters", () => {
@@ -58,5 +60,22 @@ describe("formatDistance", () => {
     [1250, "約1.3km"],
   ])("%i m は「%s」と表示する", (meters, text) => {
     expect(formatDistance(meters)).toBe(text);
+  });
+});
+
+describe("所要時間を歩く速さで計算する（#72）", () => {
+  it("所要時間（秒）= 距離 ÷ 歩く速さ", () => {
+    expect(walkingSeconds(2400, "normal")).toBe(30 * 60);
+    expect(walkingSeconds(2600, "slow")).toBeCloseTo((2600 / 60) * 60, 6);
+    expect(walkingSeconds(3000, "fast")).toBe(30 * 60);
+  });
+
+  it("時間で選んだときは選んだ歩く速さ、距離で選んだときは「ふつう」で計算する", () => {
+    expect(
+      durationSpeed({ ...INITIAL_CONDITIONS, mode: "time", speed: "slow" }),
+    ).toBe("slow");
+    expect(
+      durationSpeed({ ...INITIAL_CONDITIONS, mode: "distance", speed: "slow" }),
+    ).toBe("normal");
   });
 });
