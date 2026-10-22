@@ -27,6 +27,8 @@ export type WalkState =
       talk: WalkTalk;
       /** 歩いている向き。逆向きに歩き出したら逆回りとして扱う（#52） */
       direction: WalkDirection;
+      /** 出発してから位置の更新を受け取った回数（#66。E2E で更新が届いたことを確かめるため） */
+      updates: number;
     }
   | { status: "unavailable" };
 
@@ -64,6 +66,7 @@ export function useWalk(path: LatLng[]) {
       offRouteCount: 0,
       talk: startWalkTalk(),
       direction: initialWalkDirection(),
+      updates: 0,
     });
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
@@ -96,6 +99,7 @@ export function useWalk(path: LatLng[]) {
                   offRouteCount,
                 }),
             direction,
+            updates: previous.updates + 1,
           };
         });
       },

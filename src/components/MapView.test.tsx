@@ -573,6 +573,32 @@ describe("MapView", () => {
       fireEvent.click(screen.getByRole("button", { name: "出発" }));
     }
 
+    describe("位置の更新を受け取った回数（#66、E2E 用）", () => {
+      it("散歩中、位置の更新を受け取るたびに data-walk-updates が 0 → 1 → 2 と増える", async () => {
+        await startWalk();
+        expect(container()).toHaveAttribute("data-walk-updates", "0");
+        move(HERE);
+        expect(container()).toHaveAttribute("data-walk-updates", "1");
+        // 同じ位置が届いても数える（更新を受け取ったことを確かめるため）
+        move(HERE);
+        expect(container()).toHaveAttribute("data-walk-updates", "2");
+      });
+
+      it("散歩中でないときは data-walk-updates を出さない", async () => {
+        fetchMock.mockImplementation(async () =>
+          routeResponse(200, LOOP_POLYLINE),
+        );
+        render(<MapView apiKey="test-key" />);
+        succeed();
+        await generateRoute();
+        expect(container()).not.toHaveAttribute("data-walk-updates");
+        fireEvent.click(screen.getByRole("button", { name: "出発" }));
+        expect(container()).toHaveAttribute("data-walk-updates", "0");
+        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        expect(container()).not.toHaveAttribute("data-walk-updates");
+      });
+    });
+
     describe("逆回りに歩いても動く（#52）", () => {
       // 出発点（HERE）から北へ約300m → 東 → 南 → 西へ戻る正方形。逆回りは東へ歩き出す
       const SQUARE = "kryxEcprsY{O??sSzO??rS";

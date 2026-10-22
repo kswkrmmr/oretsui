@@ -1,3 +1,4 @@
+import { moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 
 // @vis.gl/react-google-maps も内側の div に data-testid="map" を付けるため、
@@ -60,13 +61,16 @@ test("散歩中に位置を進めると、兄貴も先へ進む", async ({ page,
     "current",
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
-  await page.getByRole("button", { name: "出発" }).click();
+  await startWalk(page);
   await expect(page.getByTestId("walk-progress")).toHaveText(
     "歩いた 0 m / 残り 1.5 km",
   );
 
   // 北へ約 222m 進む
-  await context.setGeolocation({ latitude: 35.6915, longitude: 139.6917 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6915,
+    longitude: 139.6917,
+  });
   await expect(page.getByTestId("walk-progress")).toHaveText(
     "歩いた 222 m / 残り 1.3 km",
   );

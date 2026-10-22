@@ -97,6 +97,11 @@ export function MapView({ apiKey }: Props) {
   const anikiAttributes = aniki
     ? { "data-aniki-lat": aniki.lat, "data-aniki-lng": aniki.lng }
     : {};
+  // 散歩中に位置の更新を受け取った回数（#66）。E2E で、位置を動かしたら更新が届くまで待つために使う
+  const walkAttributes =
+    walk.state.status === "walking"
+      ? { "data-walk-updates": walk.state.updates }
+      : {};
   const routeAttributes =
     routeDistance === null ? {} : { "data-route-distance": routeDistance };
 
@@ -113,6 +118,7 @@ export function MapView({ apiKey }: Props) {
       {...startAttributes}
       {...routeAttributes}
       {...anikiAttributes}
+      {...walkAttributes}
     >
       {apiKey ? (
         <>

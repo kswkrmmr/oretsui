@@ -1,3 +1,4 @@
+import { moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 // @vis.gl/react-google-maps も内側の div に data-testid="map" を付けるため、
@@ -153,12 +154,19 @@ test("「出発」を押すと、位置を動かすたびに歩いた距離と�
   const box = await start.boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44);
   await start.click();
+  await expect(mapContainer(page)).toHaveAttribute("data-walk-updates", "1");
 
   const progress = page.getByTestId("walk-progress");
   await expect(progress).toHaveText("歩いた 0 m / 残り 1.5 km");
-  await context.setGeolocation({ latitude: 35.6915, longitude: 139.6917 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6915,
+    longitude: 139.6917,
+  });
   await expect(progress).toHaveText("歩いた 222 m / 残り 1.3 km");
-  await context.setGeolocation({ latitude: 35.6935, longitude: 139.6917 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6935,
+    longitude: 139.6917,
+  });
   await expect(progress).toHaveText("歩いた 445 m / 残り 1.1 km");
 
   await page.getByRole("button", { name: "終了" }).click();
@@ -181,7 +189,7 @@ test("散歩中にルートから外れた位置が2回続くと「ルートか�
     "current",
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
-  await page.getByRole("button", { name: "出発" }).click();
+  await startWalk(page);
   const progress = page.getByTestId("walk-progress");
   await expect(progress).toHaveText("歩いた 0 m / 残り 1.5 km");
 
@@ -190,13 +198,22 @@ test("散歩中にルートから外れた位置が2回続くと「ルートか�
     .getByRole("region", { name: "散歩の条件" })
     .getByRole("alert");
   // 区間の途中から西へ約 90m。1回目では知らせない
-  await context.setGeolocation({ latitude: 35.6915, longitude: 139.6907 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6915,
+    longitude: 139.6907,
+  });
   await expect(progress).toHaveText("歩いた 222 m / 残り 1.3 km");
   await expect(alert).toHaveCount(0);
   // 2回目（少しずらして、位置の更新として届くようにする）
-  await context.setGeolocation({ latitude: 35.6916, longitude: 139.6907 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6916,
+    longitude: 139.6907,
+  });
   await expect(alert).toHaveText("ルートから外れています");
 
-  await context.setGeolocation({ latitude: 35.6925, longitude: 139.6917 });
+  await moveDuringWalk(page, context, {
+    latitude: 35.6925,
+    longitude: 139.6917,
+  });
   await expect(alert).toHaveCount(0);
 });
