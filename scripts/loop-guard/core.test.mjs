@@ -8,6 +8,7 @@ import {
   errorSignature,
   evaluate,
   initialState,
+  nextIssue,
   prEvent,
   resumeCheck,
 } from "./core.mjs";
@@ -238,5 +239,50 @@ describe("resumeCheck", () => {
     expect(
       resumeCheck({ ...stopped, labels: ["feature", "loop:ready"] }),
     ).toMatch(/loop:stopped が付いていません/);
+  });
+});
+
+describe("nextIssue（#76：処理順をラベルで決める）", () => {
+  const issue = (number, ...labels) => ({ number, labels });
+
+  it("loop:ready の中から番号の小さい順に選ぶ", () => {
+    expect(
+      nextIssue([issue(12, "loop:ready"), issue(5, "loop:ready"), issue(9)]),
+    ).toBe(5);
+  });
+
+  it("priority:high が付いていれば、番号が大きくても先に選ぶ", () => {
+    expect(
+      nextIssue([
+        issue(5, "loop:ready"),
+        issue(20, "loop:ready", "priority:high"),
+        issue(30, "loop:ready", "priority:high"),
+      ]),
+    ).toBe(20);
+  });
+
+  it("rehearsal は priority:high よりも先に選ぶ", () => {
+    expect(
+      nextIssue([
+        issue(20, "loop:ready", "priority:high"),
+        issue(40, "loop:ready", "rehearsal"),
+      ]),
+    ).toBe(40);
+  });
+
+  it("loop:ready がないもの・loop:stopped・human-task は選ばない", () => {
+    expect(
+      nextIssue([
+        issue(1, "priority:high"),
+        issue(2, "loop:ready", "loop:stopped"),
+        issue(3, "loop:ready", "human-task"),
+        issue(4, "loop:ready"),
+      ]),
+    ).toBe(4);
+  });
+
+  it("選べるものがなければ null", () => {
+    expect(nextIssue([])).toBeNull();
+    expect(nextIssue([issue(1), issue(2, "loop:review")])).toBeNull();
   });
 });

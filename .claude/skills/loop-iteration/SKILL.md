@@ -28,9 +28,15 @@ G = node scripts/loop-guard/cli.mjs
 
 ## 1. 次の issue を選ぶ
 
-- `rehearsal` と `loop:ready` の両方が付いた open の issue があれば、それを最優先で選ぶ（ループのリハーサル用）
-- なければ `CLAUDE.md` の「処理順」の中で、open かつ `loop:ready` ラベルが付いた最初の issue を選ぶ
-- 見つからなければ PushNotification で「着手できる issue がありません」と通知し、ループを終了する
+自分で選ばず、必ず `$G next` を使う（#76。処理順はラベルで決まる）。
+
+```bash
+$G next   # 次に着手する issue の番号を1行出す。なければ何も出さず終了コード 1
+```
+
+- 選ばれる順：`rehearsal` → `priority:high` → それ以外。同じ順位の中では番号の小さい順。どれも `loop:ready` が付いているものだけ
+- 終了コード 1（着手できる issue がない）→ PushNotification で「着手できる issue がありません」と通知し、ループを終了する
+- 終了コード 3（`ERROR:` が出る。gh の失敗＝ネットワーク・認証切れなど）→ 終了条件 E。PushNotification で「issue の一覧を取得できません：<理由>」と通知し、ループを終了する（作業中の issue はないので停止手順は不要）
 
 ## 2. 準備
 

@@ -10,6 +10,7 @@
 //   node scripts/loop-guard/cli.mjs stop "<理由>"        自分の判断で停止（仕様不明など）
 //   node scripts/loop-guard/cli.mjs watch-pr <PR番号> [--since <ISO時刻>]
 //                                      PR のマージ／クローズ／コメントを待つ（1行出して終了）
+//   node scripts/loop-guard/cli.mjs next                次に着手する issue の番号（なければ終了コード1）
 //   node scripts/loop-guard/cli.mjs status              現在の状態を表示
 //   node scripts/loop-guard/cli.mjs finish              PR 作成後に状態を片付ける
 //   node scripts/loop-guard/cli.mjs resume <issue番号>  （人間用）停止した issue を再開できる状態に戻す
@@ -30,6 +31,7 @@ import {
   applyVerify,
   evaluate,
   initialState,
+  nextIssue,
   prEvent,
   resumeCheck,
   WATCH_MAX_ERRORS,
@@ -290,6 +292,49 @@ switch (cmd) {
     );
     break;
   }
+  case "next": {
+    // 次に着手する issue の番号を出す（#76）。なければ何も出さず終了コード 1。
+    // gh が失敗したら（ネットワーク・認証切れ）、「issue がない」と区別するため理由を出して終了コード 3
+    const LIMIT = 200;
+    let output;
+    try {
+      output = execFileSync(
+        "gh",
+        [
+          "issue",
+          "list",
+          "--state",
+          "open",
+          // --label で絞ると GitHub の検索を使うため、付けたばかりのラベルが数秒間見えない。
+          // open の issue を全部取ってきて、ラベルは nextIssue で絞る
+          "--limit",
+          String(LIMIT),
+          "--json",
+          "number,labels",
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+      );
+    } catch (e) {
+      const detail = String(e.stderr || e.message)
+        .trim()
+        .split("\n")[0];
+      console.error(`ERROR: issue の一覧を取得できません（${detail}）`);
+      process.exit(EXIT.stop);
+    }
+    const all = JSON.parse(output);
+    if (all.length >= LIMIT)
+      console.error(
+        `注意: open の issue が ${LIMIT} 件以上あり、一部しか見ていません`,
+      );
+    const issues = all.map(({ number, labels }) => ({
+      number,
+      labels: labels.map((l) => l.name),
+    }));
+    const number = nextIssue(issues);
+    if (number === null) process.exit(EXIT.fail);
+    console.log(number);
+    break;
+  }
   case "status":
     console.log(JSON.stringify(load(), null, 2));
     break;
@@ -299,7 +344,7 @@ switch (cmd) {
     break;
   default:
     console.error(
-      "使い方: loop-guard <start|verify|review|ci|check|stop|watch-pr|status|finish|resume>",
+      "使い方: loop-guard <start|verify|review|ci|check|stop|watch-pr|next|status|finish|resume>",
     );
     process.exit(EXIT.usage);
 }
