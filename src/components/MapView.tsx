@@ -15,8 +15,8 @@ import { ConditionSheet } from "@/components/ConditionSheet";
 import { useLoopRoute, type LoopRouteState } from "@/hooks/useLoopRoute";
 import { useStartPoint } from "@/hooks/useStartPoint";
 import { useWakeLock } from "@/hooks/useWakeLock";
-import { useWalk, type WalkState } from "@/hooks/useWalk";
-import { formatDistance, formatDuration } from "@/lib/format";
+import { useWalk, type WalkRecord, type WalkState } from "@/hooks/useWalk";
+import { formatDistance, formatDuration, formatElapsed } from "@/lib/format";
 import {
   LONG_PRESS_MS,
   movedTooFar,
@@ -67,7 +67,9 @@ export function MapView({ apiKey }: Props) {
   // 兄貴の一言（#41）。「別のルート」で作ったかどうかで言い方を変える
   const [anotherRoute, setAnotherRoute] = useState(false);
   // 散歩を終えたら、次の操作まで「おつかれ」と言う（#42）
-  const [finished, setFinished] = useState(false);
+  // 終了したときの記録（#68）。まとめと「おつかれ」は、次の操作まで出しておく
+  const [lastWalk, setLastWalk] = useState<WalkRecord | null>(null);
+  const finished = lastWalk !== null;
   const scene: AnikiScene | null =
     walk.state.status === "walking"
       ? walk.state.talk.scene
@@ -212,32 +214,35 @@ export function MapView({ apiKey }: Props) {
                     collapsed={collapsed}
                     walk={walk.state}
                     total={walk.total}
+                    startedAt={walk.startedAt}
+                    lastWalk={
+                      finished && route.status === "done" ? lastWalk : null
+                    }
                     onStartWalk={() => {
-                      setFinished(false);
+                      setLastWalk(null);
                       setFollowing(true);
                       walk.start();
                     }}
                     onStopWalk={() => {
-                      setFinished(true);
-                      walk.stop();
+                      setLastWalk(walk.stop());
                     }}
                     onRetry={() => {
                       setShowConditions(false);
                       retry();
                     }}
                     onAnother={() => {
-                      setFinished(false);
+                      setLastWalk(null);
                       setAnotherRoute(true);
                       another();
                     }}
                     onEditConditions={() => {
-                      setFinished(false);
+                      setLastWalk(null);
                       setShowConditions(true);
                     }}
                   />
                 }
                 onGenerate={(meters) => {
-                  setFinished(false);
+                  setLastWalk(null);
                   setAnotherRoute(false);
                   setRouteDistance(meters);
                   setShowConditions(false);
@@ -322,6 +327,8 @@ function RouteStatus({
   collapsed,
   walk,
   total,
+  startedAt,
+  lastWalk,
   onStartWalk,
   onStopWalk,
   onRetry,
@@ -332,6 +339,8 @@ function RouteStatus({
   collapsed: boolean;
   walk: WalkState;
   total: number;
+  startedAt: number | null;
+  lastWalk: WalkRecord | null;
   onStartWalk: () => void;
   onStopWalk: () => void;
   onRetry: () => void;
@@ -363,6 +372,7 @@ function RouteStatus({
             現在地を取得できません
           </p>
         )}
+        {startedAt !== null && <WalkElapsed startedAt={startedAt} />}
         <button
           type="button"
           onClick={onStopWalk}
@@ -393,9 +403,22 @@ function RouteStatus({
         </strong>
       </p>
     );
-    if (!collapsed) return summary;
+    const walkSummary = lastWalk && (
+      <p data-testid="walk-summary" className="text-center text-sm font-bold">
+        今日の散歩 {formatDuration(lastWalk.seconds)}・
+        {formatDistance(lastWalk.meters)}
+      </p>
+    );
+    if (!collapsed)
+      return (
+        <>
+          {walkSummary}
+          {summary}
+        </>
+      );
     return (
       <>
+        {walkSummary}
         {summary}
         <div className="flex gap-2">
           <button
@@ -541,4 +564,21 @@ function pixelToLatLng(map: google.maps.Map, client: Point): LatLng | null {
     new google.maps.Point(world.x, world.y),
   );
   return latLng ? { lat: latLng.lat(), lng: latLng.lng() } : null;
+}
+
+/** 散歩の経過時間（#68）。1秒ごとに表示を更新する */
+function WalkElapsed({ startedAt }: { startedAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <p data-testid="walk-elapsed" className="text-center text-sm">
+      経過{" "}
+      <strong className="text-base tabular-nums">
+        {formatElapsed(Math.max(0, now - startedAt) / 1000)}
+      </strong>
+    </p>
+  );
 }
