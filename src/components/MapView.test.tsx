@@ -125,7 +125,11 @@ const POLYLINE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@";
 // 出発点から北へ約445m、東へ約452m、出発点へ戻る三角形（全長 約1.5km）
 const LOOP_POLYLINE = "kryxEcprsY_X??g^~Wf^";
 
-function routeResponse(status = 200, encodedPolyline = POLYLINE) {
+function routeResponse(
+  status = 200,
+  encodedPolyline = POLYLINE,
+  overrides: { distanceMeters?: number; withinTolerance?: boolean } = {},
+) {
   return Response.json(
     status === 200
       ? {
@@ -134,6 +138,7 @@ function routeResponse(status = 200, encodedPolyline = POLYLINE) {
           encodedPolyline,
           waypoints: [],
           withinTolerance: true,
+          ...overrides,
         }
       : { error: "ルート検索に失敗しました" },
     { status },
@@ -356,6 +361,86 @@ describe("MapView", () => {
     expect(screen.getByTestId("route-summary")).toHaveTextContent(
       "ルート 2.1 km・約27分",
     );
+  });
+
+  describe("所要時間を歩く速さで計算し、ずれたら兄貴が言う（#72）", () => {
+    it("所要時間は Routes API の時間ではなく、選んだ歩く速さで計算する", async () => {
+      // Routes API は 1620秒（27分）と返すが、ゆっくり（60m/分）なら 2134m は約36分
+      fetchMock.mockResolvedValue(routeResponse());
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      fireEvent.click(screen.getByRole("button", { name: "ゆっくり" }));
+      await generateRoute();
+      expect(screen.getByTestId("route-summary")).toHaveTextContent(
+        "ルート 2.1 km・約36分",
+      );
+    });
+
+    it("距離で選んだときは「ふつう」の速さで計算する", async () => {
+      fetchMock.mockResolvedValue(routeResponse());
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      // 時間のほうでゆっくりを選んでから距離に切り替える。ゆっくりは使わない
+      fireEvent.click(screen.getByRole("button", { name: "ゆっくり" }));
+      fireEvent.click(screen.getByRole("button", { name: "距離" }));
+      await generateRoute();
+      // 2134m ÷ 80m/分 ≒ 27分
+      expect(screen.getByTestId("route-summary")).toHaveTextContent(
+        "ルート 2.1 km・約27分",
+      );
+    });
+
+    it("目標より長く ±10% に入らなかったら「ちょっと長めになっちまった」", async () => {
+      // 目標は 30分・ふつう → 2400m
+      fetchMock.mockResolvedValue(
+        routeResponse(200, POLYLINE, {
+          distanceMeters: 2800,
+          withinTolerance: false,
+        }),
+      );
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      await generateRoute();
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
+      );
+    });
+
+    it("目標より短く ±10% に入らなかったら「ちょっと短めになっちまった」。別のルートでも同じ", async () => {
+      fetchMock.mockImplementation(async () =>
+        routeResponse(200, POLYLINE, {
+          distanceMeters: 2000,
+          withinTolerance: false,
+        }),
+      );
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      await generateRoute();
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "別のルート" }));
+      });
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+      );
+    });
+
+    it("±10% に入っていれば、今までどおりのセリフ", async () => {
+      fetchMock.mockResolvedValue(
+        routeResponse(200, POLYLINE, {
+          distanceMeters: 2500,
+          withinTolerance: true,
+        }),
+      );
+      render(<MapView apiKey="test-key" />);
+      succeed();
+      await generateRoute();
+      expect(screen.getByTestId("aniki-line")).toHaveTextContent(
+        "いい道を見つけたぞ。俺についてこい！",
+      );
+    });
   });
 
   it("作り直すと、前のルートの線を消す", async () => {

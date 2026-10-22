@@ -5,6 +5,7 @@ import {
   anikiFace,
   anikiFaceSrc,
   anikiScene,
+  routeFit,
   nextWalkTalk,
   startWalkTalk,
   type AnikiInput,
@@ -68,6 +69,9 @@ describe("ANIKI_LINES", () => {
       finished: "おつかれ！いい散歩だったな",
       // 逆回りに切り替えたとき（#52）
       reversed: "そっちか！ならこっちだ、俺についてこい！",
+      // ルートの長さが目標の ±10% に入らなかったとき（#72）
+      longer: "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
+      shorter: "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
     });
   });
 });
@@ -194,5 +198,47 @@ describe("逆回りに切り替えたときの一言（#52）", () => {
       "そっちか！ならこっちだ、俺についてこい！",
     );
     expect(anikiFace("reversed")).toBe("fired-up");
+  });
+});
+
+describe("ルートの長さが目標とずれたとき（#72）", () => {
+  it("±10% に入っていれば ok、入っていなければ長い・短いを距離で決める", () => {
+    expect(
+      routeFit({ withinTolerance: true, distanceMeters: 2800 }, 2400),
+    ).toBe("ok");
+    expect(
+      routeFit({ withinTolerance: false, distanceMeters: 2800 }, 2400),
+    ).toBe("longer");
+    expect(
+      routeFit({ withinTolerance: false, distanceMeters: 2000 }, 2400),
+    ).toBe("shorter");
+  });
+
+  it("ずれたときは「長め」「短め」の場面になる（別のルートでも）", () => {
+    const base: AnikiInput = {
+      hasStart: true,
+      routeStatus: "done",
+      another: false,
+      fit: "longer",
+    };
+    expect(anikiScene(base)).toBe("longer");
+    expect(anikiScene({ ...base, fit: "shorter" })).toBe("shorter");
+    expect(anikiScene({ ...base, another: true })).toBe("longer");
+  });
+
+  it("ずれていなければ、今までどおりの場面", () => {
+    const base: AnikiInput = {
+      hasStart: true,
+      routeStatus: "done",
+      another: false,
+      fit: "ok",
+    };
+    expect(anikiScene(base)).toBe("found");
+    expect(anikiScene({ ...base, another: true })).toBe("another");
+  });
+
+  it("表情は troubled", () => {
+    expect(anikiFace("longer")).toBe("troubled");
+    expect(anikiFace("shorter")).toBe("troubled");
   });
 });
