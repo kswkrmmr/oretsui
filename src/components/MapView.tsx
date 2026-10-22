@@ -123,7 +123,7 @@ export function MapView({ apiKey }: Props) {
       ? { "data-walk-updates": walk.state.updates }
       : {};
   // 地図の向きの設定（#69、E2E 用）。散歩中だけ出す
-  // 実際の地図の向き。方角が分からないときは北が上
+  // 地図の向きのモード（#69、E2E 用）。方角が分からないときは北が上（north）
   const headingAttributes = walking
     ? { "data-heading-mode": headingUnavailable ? "north" : headingMode }
     : {};

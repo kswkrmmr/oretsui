@@ -5,13 +5,20 @@ import { startWalk } from "./helpers";
 // テストの環境には方角のセンサーがないので、切り替えのボタンと状態だけを確かめる
 test.beforeEach(async ({ page, context }) => {
   // センサーがないと3秒後に「方角が分からない」になり、方位のボタンが消える。
-  // ボタンの切り替えを確かめるため、時計を止めておく
-  await page.clock.install();
-  // Playwright の Chromium には DeviceOrientationEvent がなく、「センサーなし」とみなされる。
-  // センサーのあるスマホとして振る舞わせる（方角のイベントは届かないが、時計を止めているので待ち続ける）
+  // ボタンの切り替えを確かめるため、時計を止めておく。
+  // Playwright の時計は install しただけでは進み続けるので、pauseAt で止める
+  await page.clock.install({ time: new Date("2026-10-22T10:00:00") });
+  await page.clock.pauseAt(new Date("2026-10-22T10:00:01"));
+  // 方角の許可を求める関数があれば（Chromium・iPhone の Safari）、ユーザーが「許可」を押したことにする。
+  // テストでは誰も許可を押さないので、そのままだと「拒否」になり北が上になる
   await page.addInitScript(() => {
-    if (!("DeviceOrientationEvent" in window))
-      Object.assign(window, { DeviceOrientationEvent: class extends Event {} });
+    const OrientationEvent = (
+      window as unknown as {
+        DeviceOrientationEvent?: { requestPermission?: () => Promise<string> };
+      }
+    ).DeviceOrientationEvent;
+    if (typeof OrientationEvent?.requestPermission === "function")
+      OrientationEvent.requestPermission = async () => "granted";
   });
   await page.route(/maps\.googleapis\.com/, (route) => route.abort());
   await page.route("**/api/route", (route) =>
