@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { APP_ICONS, THEME_COLOR } from "@/lib/app-icon";
+import { iconUrl } from "@/lib/icon-url";
 
 /** ホーム画面に追加したとき、アプリのように全画面で開くための設定（#11） */
 export default function manifest(): MetadataRoute.Manifest {
@@ -16,7 +17,8 @@ export default function manifest(): MetadataRoute.Manifest {
     // apple-touch-icon は iPhone がメタタグから読むので、manifest には入れない
     icons: APP_ICONS.filter(({ file }) => file !== "apple-touch-icon.png").map(
       ({ file, size, purpose }) => ({
-        src: `/icons/${file}`,
+        // 画像を差し替えたら URL も変わるよう、版を付ける（#86）
+        src: iconUrl(file),
         sizes: `${size}x${size}`,
         type: "image/png",
         purpose,
