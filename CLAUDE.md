@@ -23,12 +23,16 @@
 
 `/loop /loop-iteration` で、issue を1つずつ自律的に進める。手順は `.claude/skills/loop-iteration/SKILL.md`。
 
-### 処理順
+### 処理順（ラベルで決める）
 
-#4 → #13 → #5 → #6 → #31 → #7 → #8 → #9 → #36 → #10 → #11 → #41 → #42 → #47 → #50 → #51 → #52 → #53 → #59 → #60 → #61 → #66 → #68 → #72 → #69
+人間が仕様を確認して `loop:ready` ラベルを付けた issue だけに着手する。次の issue は `node scripts/loop-guard/cli.mjs next` で決める（#76）。
 
-人間が仕様を確認して `loop:ready` ラベルを付けた issue だけに着手する。
-`rehearsal` ラベルの issue（ループのリハーサル用）は処理順より優先する。リハーサルで止まった issue は本番のループを止めない。
+1. `rehearsal`（ループのリハーサル用）
+2. `priority:high`（先にやってほしいもの）
+3. それ以外
+
+同じ順位の中では番号の小さい順。順番を変えたいときは `priority:high` を付け外しする（CLAUDE.md の変更や PR は要らない）。
+リハーサルで止まった issue は本番のループを止めない。
 
 ### ラベル
 

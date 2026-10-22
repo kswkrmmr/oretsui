@@ -190,3 +190,23 @@ export function resumeCheck(issue) {
     return `issue #${issue.number} には loop:stopped が付いていません（停止していない issue は再開できません）`;
   return null;
 }
+
+/**
+ * 次に着手する issue を選ぶ（#76。処理順を CLAUDE.md に書かず、ラベルで決める）。
+ * 1. rehearsal（リハーサル用） 2. priority:high 3. それ以外。同じ順位の中では番号の小さい順。
+ * loop:ready が付いていないもの、loop:stopped・human-task が付いたものは選ばない。
+ * issues = [{ number, labels: string[] }]。選べるものがなければ null
+ */
+export function nextIssue(issues) {
+  const rank = (labels) =>
+    labels.includes("rehearsal") ? 0 : labels.includes("priority:high") ? 1 : 2;
+  const candidates = issues
+    .filter(
+      ({ labels }) =>
+        labels.includes("loop:ready") &&
+        !labels.includes("loop:stopped") &&
+        !labels.includes("human-task"),
+    )
+    .sort((a, b) => rank(a.labels) - rank(b.labels) || a.number - b.number);
+  return candidates[0]?.number ?? null;
+}
