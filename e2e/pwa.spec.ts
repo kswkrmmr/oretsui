@@ -73,3 +73,42 @@ test("iPhone の Safari 用のメタタグと apple-touch-icon がページに�
   const body = await response.body();
   expect(body.readUInt32BE(16)).toBe(180);
 });
+
+test("ホーム画面のアイコンは兄貴の画像になっている（緑一色の仮のアイコンではない）（#84）", async ({
+  page,
+}) => {
+  await page.goto("/");
+  // ブラウザの中でアイコンを canvas に描き、テーマカラーの緑（#16a34a）に近くない画素の割合を数える
+  const stats = await page.evaluate(async () => {
+    const blob = await (await fetch("/icons/icon-512.png")).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(bitmap, 0, 0);
+    const { data } = context.getImageData(0, 0, bitmap.width, bitmap.height);
+    let other = 0;
+    let transparent = 0;
+    const colors = new Set<number>();
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 255) transparent++;
+      // 色の数（下位ビットを落として数える）
+      colors.add(
+        ((data[i] >> 3) << 10) | ((data[i + 1] >> 3) << 5) | (data[i + 2] >> 3),
+      );
+      const distance =
+        Math.abs(data[i] - 0x16) +
+        Math.abs(data[i + 1] - 0xa3) +
+        Math.abs(data[i + 2] - 0x4a);
+      if (distance > 60) other++;
+    }
+    const pixels = data.length / 4;
+    return { otherRatio: other / pixels, transparent, colors: colors.size };
+  });
+  // 仮のアイコンは大部分が緑。兄貴の画像なら、緑でない画素がほとんどを占める
+  expect(stats.otherRatio).toBeGreaterThan(0.8);
+  // 画像が読み込めずに透明や一色になっていないこと（透明・一色でも「緑でない」と数えられてしまうため）
+  expect(stats.transparent).toBe(0);
+  expect(stats.colors).toBeGreaterThan(1000);
+});
