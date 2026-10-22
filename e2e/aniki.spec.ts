@@ -1,3 +1,4 @@
+import { moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 // 外側（DOM 上で先に出てくる）コンテナを明示的に指定する
@@ -163,11 +164,11 @@ test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る →
     "current",
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
-  await page.getByRole("button", { name: "出発" }).click();
+  await startWalk(page);
   const line = page.getByTestId("aniki-line");
   const progress = page.getByTestId("walk-progress");
-  const moveTo = async (latitude: number, longitude: number) =>
-    context.setGeolocation({ latitude, longitude });
+  const moveTo = (latitude: number, longitude: number) =>
+    moveDuringWalk(page, context, { latitude, longitude });
 
   await expect(line).toHaveText("よし、行くぞ！俺についてこい！");
   // 北へ進み、東の区間へ。進み具合は一度に 300m 先までしか探さないので、少しずつ動かす

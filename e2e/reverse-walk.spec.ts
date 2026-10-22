@@ -1,3 +1,4 @@
+import { moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page } from "@playwright/test";
 
 // @vis.gl/react-google-maps も内側の div に data-testid="map" を付けるため、
@@ -37,19 +38,19 @@ test("出発して逆向きに歩くと、歩いた距離が増え、兄貴が�
     "current",
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
-  await page.getByRole("button", { name: "出発" }).click();
+  await startWalk(page);
   const progress = page.getByTestId("walk-progress");
   await expect(progress).toHaveText(/^歩いた 0 m/);
 
   // 順回り（北）ではなく、東へ 45m 歩き出す（逆回りが順回りより 30m 以上多くなると切り替わる）
-  await context.setGeolocation({ ...HERE, longitude: eastOf(45) });
+  await moveDuringWalk(page, context, { ...HERE, longitude: eastOf(45) });
   await expect(progress).toHaveText(/^歩いた 4\d m/);
   await expect(page.getByTestId("aniki-line")).toHaveText(
     "そっちか！ならこっちだ、俺についてこい！",
   );
 
   // 逆回りのまま、さらに東へ進むと歩いた距離も増え続ける
-  await context.setGeolocation({ ...HERE, longitude: eastOf(100) });
+  await moveDuringWalk(page, context, { ...HERE, longitude: eastOf(100) });
   await expect(progress).toHaveText(/^歩いた (9\d|10\d) m/);
 });
 
@@ -74,19 +75,19 @@ test("最初の約20mを行きと帰りで共有するルートでも、角か�
     "current",
   );
   await page.getByRole("button", { name: "ルートを作る" }).click();
-  await page.getByRole("button", { name: "出発" }).click();
+  await startWalk(page);
   const progress = page.getByTestId("walk-progress");
   await expect(progress).toHaveText(/^歩いた 0 m/);
 
   // 同じ道を角まで歩く（まだどちら向きか分からないので切り替えない）
-  await context.setGeolocation(corner);
+  await moveDuringWalk(page, context, corner);
   await expect(progress).toHaveText(/^歩いた (1\d|2\d) m/);
   await expect(page.getByTestId("aniki-line")).not.toHaveText(
     "そっちか！ならこっちだ、俺についてこい！",
   );
 
   // 角から南（逆回りの道）へ約35m
-  await context.setGeolocation({
+  await moveDuringWalk(page, context, {
     ...corner,
     latitude: corner.latitude - 35 / 111_195,
   });
