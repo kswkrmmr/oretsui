@@ -1,12 +1,23 @@
+import { distanceBetween } from "@/lib/loop-route";
+import { pointAlong } from "@/lib/route-direction";
 import type { LatLng } from "@/lib/start-point";
 import { walkedDistance } from "@/lib/walk-progress";
 
-/** 逆向きにこの距離（m）以上進んだら、逆回りに切り替える候補にする */
-export const REVERSE_MIN_M = 40;
-/** 順向きにこの距離（m）未満しか進んでいなければ、逆回りに切り替える */
-export const FORWARD_MAX_M = 10;
+/**
+ * 逆回りの歩いた距離が、順回りよりこの距離（m）以上多くなったら逆回りに切り替える（#60）。
+ * 最初の道を行きと帰りで共有するルートでは、共有している間はどちらも同じだけ増えるので差が開かない。
+ * 分かれ道から逆回りの道を進むと、逆回りだけが増えて差が開く
+ */
+export const REVERSE_LEAD_M = 30;
+/**
+ * さらに、逆回りのルート上の点が、順回りのルート上の点よりこの距離（m）以上
+ * 現在地に近いときだけ切り替える（#60 のレビューで決定）。
+ * 帰り道が隣の筋を平行に通るルートでは、順回りの道を歩いていても逆回りの道のりが
+ * 「順回り + 筋の間隔」になるため、差だけでは誤って切り替わる。そのとき近いのは順回りの点
+ */
+export const REVERSE_CLOSER_M = 10;
 /** 向きを判定するのは、どちらかの歩いた距離がこの距離（m）に達するまで。その後は向きを固定する */
-export const DECIDE_WITHIN_M = 150;
+export const DECIDE_WITHIN_M = 300;
 
 /**
  * 散歩の向き（#52）。周回ルートはどちら回りでも同じ道なので、
@@ -48,9 +59,14 @@ export function nextWalkDirection(
   let switched = false;
   if (!decided) {
     if (Math.max(forward, reverse) >= DECIDE_WITHIN_M) {
-      // 判定は最初の 150m だけ。GPS が大きく飛んで一気に超えたときも、切り替えずに固定する
+      // 判定は最初の 300m だけ。GPS が大きく飛んで一気に超えたときも、切り替えずに固定する
       decided = true;
-    } else if (reverse >= REVERSE_MIN_M && forward < FORWARD_MAX_M) {
+    } else if (
+      reverse >= forward + REVERSE_LEAD_M &&
+      distanceBetween(position, pointAlong(reversePath(path), reverse)) +
+        REVERSE_CLOSER_M <=
+        distanceBetween(position, pointAlong(path, forward))
+    ) {
       // 切り替えは1回だけ。逆回りから順回りへは戻らない
       reversed = true;
       decided = true;
