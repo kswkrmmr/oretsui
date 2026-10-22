@@ -447,7 +447,8 @@ function RouteStatus({
         <button
           type="button"
           onClick={onStopWalk}
-          className="min-h-12 rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
+          // 歩きながらでも押しやすいよう、横幅いっぱい・高さ 56px（#79）
+          className="min-h-14 w-full rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
         >
           終了
         </button>
@@ -511,7 +512,8 @@ function RouteStatus({
         <button
           type="button"
           onClick={onStartWalk}
-          className="min-h-12 rounded-xl bg-blue-600 font-bold text-white active:bg-blue-700"
+          // 歩きながらでも押しやすいよう、横幅いっぱい・高さ 56px（#79）
+          className="min-h-14 w-full rounded-xl bg-blue-600 font-bold text-white active:bg-blue-700"
         >
           出発
         </button>
