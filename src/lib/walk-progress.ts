@@ -92,21 +92,23 @@ export function distanceToRoute(path: LatLng[], position: LatLng): number {
   return nearest;
 }
 
-/** 精度に合わせた外れの基準の、いちばん厳しい値（m）（#53） */
-export const OFF_ROUTE_MIN_M = 25;
-/** 精度に足す余裕（m）（#53） */
-export const OFF_ROUTE_MARGIN_M = 15;
+/** 精度に合わせた外れの基準の、いちばん厳しい値（m）（#53。#61 で 25m から 20m に） */
+export const OFF_ROUTE_MIN_M = 20;
+/** 精度に合わせた外れの基準の、いちばんゆるい値（m）（#61。精度が取れないときの OFF_ROUTE_M とは別） */
+export const OFF_ROUTE_MAX_M = 40;
+/** 精度に足す余裕（m）（#53。#61 で 15m から 10m に） */
+export const OFF_ROUTE_MARGIN_M = 10;
 /** これより精度が悪い（m）位置は、外れの判定に使わない（#53） */
 export const OFF_ROUTE_MAX_ACCURACY_M = 50;
 
 /**
- * 外れの基準（m）。GPS の精度が良いときは厳しく、悪いときはゆるくする（#53）。
- * 「精度 + 15m」を 25m〜50m に収める。精度が取れないときは今までどおり 50m
+ * 外れの基準（m）。GPS の精度が良いときは厳しく、悪いときはゆるくする（#53、#61）。
+ * 「精度 + 10m」を 20m〜40m に収める。精度が取れないときは今までどおり 50m
  */
 export function offRouteThreshold(accuracy: number | undefined): number {
   if (accuracy === undefined || Number.isNaN(accuracy)) return OFF_ROUTE_M;
   return Math.min(
-    OFF_ROUTE_M,
+    OFF_ROUTE_MAX_M,
     Math.max(OFF_ROUTE_MIN_M, accuracy + OFF_ROUTE_MARGIN_M),
   );
 }
