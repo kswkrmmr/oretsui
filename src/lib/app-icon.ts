@@ -1,7 +1,7 @@
 /** アプリのテーマカラー（ルートの線と同じ緑） */
 export const THEME_COLOR = "#16a34a";
 
-/** ホーム画面用のアイコン。仮のもの（#11）。差し替えるときは /icons/<file> を画像で返せばよい */
+/** ホーム画面用のアイコン（#11）。中身は public/aniki/icon.png を縮小したもの（#84） */
 export type AppIcon = {
   file: string;
   size: number;
