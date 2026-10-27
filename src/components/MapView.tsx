@@ -17,6 +17,8 @@ import { useDeviceHeading } from "@/hooks/useDeviceHeading";
 import { useStartPoint } from "@/hooks/useStartPoint";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useWalk, type WalkRecord, type WalkState } from "@/hooks/useWalk";
+import { useWeight } from "@/hooks/useWeight";
+import { walkingCalories } from "@/lib/calories";
 import { formatDistance, formatDuration, formatElapsed } from "@/lib/format";
 import {
   LONG_PRESS_MS,
@@ -51,6 +53,8 @@ export function MapView({ apiKey }: Props) {
   // 所要時間の計算に使う歩く速さ（#72）
   const [routeSpeed, setRouteSpeed] = useState<WalkSpeed>("normal");
   const { state: route, generate, retry, another } = useLoopRoute();
+  // 消費カロリーの計算に使う体重（#89）
+  const weight = useWeight();
   // ルートを作ったら条件を隠し、「条件を変える」で戻す。失敗したときは条件も見せる
   const [showConditions, setShowConditions] = useState(true);
   const collapsed =
@@ -271,6 +275,7 @@ export function MapView({ apiKey }: Props) {
                     walk={walk.state}
                     total={walk.total}
                     speed={routeSpeed}
+                    weight={weight.weight}
                     startedAt={walk.startedAt}
                     headingNotice={headingNotice}
                     lastWalk={
@@ -302,6 +307,8 @@ export function MapView({ apiKey }: Props) {
                     }}
                   />
                 }
+                weightInput={weight.input}
+                onWeightChange={weight.change}
                 onGenerate={(meters, speed) => {
                   setRouteSpeed(speed);
                   setLastWalk(null);
@@ -390,6 +397,7 @@ function RouteStatus({
   walk,
   total,
   speed,
+  weight,
   startedAt,
   headingNotice,
   lastWalk,
@@ -404,6 +412,7 @@ function RouteStatus({
   walk: WalkState;
   total: number;
   speed: WalkSpeed;
+  weight: number | null;
   startedAt: number | null;
   headingNotice: boolean;
   lastWalk: WalkRecord | null;
@@ -443,6 +452,15 @@ function RouteStatus({
             現在地を取得できません
           </p>
         )}
+        {walk.status === "walking" && weight !== null && (
+          <p data-testid="walk-calories" className="text-center text-sm">
+            約{" "}
+            <strong className="text-base">
+              {walkingCalories(weight, walk.walked, speed)}
+            </strong>{" "}
+            kcal
+          </p>
+        )}
         {startedAt !== null && <WalkElapsed startedAt={startedAt} />}
         <button
           type="button"
@@ -476,10 +494,14 @@ function RouteStatus({
         </strong>
       </p>
     );
+    // 体重を入れているときだけ、消費カロリーも出す（#89）
+    const calories =
+      lastWalk && walkingCalories(weight, lastWalk.meters, speed);
     const walkSummary = lastWalk && (
       <p data-testid="walk-summary" className="text-center text-sm font-bold">
         今日の散歩 {formatDuration(lastWalk.seconds)}・
         {formatDistance(lastWalk.meters)}
+        {calories !== null && `・約 ${calories} kcal`}
       </p>
     );
     if (!collapsed)
