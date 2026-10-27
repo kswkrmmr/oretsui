@@ -25,6 +25,9 @@ type Props = {
   collapsed?: boolean;
   /** シートの上部に出す、作ったルートの情報やエラー */
   status?: React.ReactNode;
+  /** 体重の入力（#89）。消費カロリーの計算に使う。任意 */
+  weightInput?: string;
+  onWeightChange?: (input: string) => void;
 };
 
 /** 画面下の、散歩の条件を選ぶシート */
@@ -33,6 +36,8 @@ export function ConditionSheet({
   onGenerate,
   collapsed = false,
   status,
+  weightInput = "",
+  onWeightChange,
 }: Props) {
   const [conditions, setConditions] = useState(INITIAL_CONDITIONS);
   const update = (change: Partial<WalkConditions>) =>
@@ -96,13 +101,28 @@ export function ConditionSheet({
             </ChoiceRow>
           )}
 
-          {/* シートを低く保ち地図を隠しすぎないよう、距離の表示とボタンを1行に並べる */}
+          {/* シートを低く保ち地図を隠しすぎないよう、距離の表示・体重・ボタンを1行に並べる */}
           <div className="flex items-center gap-3">
             <p className="text-xs leading-tight">
               歩く距離
               <br />
               <strong className="text-base">{formatDistance(meters)}</strong>
             </p>
+            {/* 体重は任意。消費カロリーの計算に使う（#89） */}
+            <label className="flex items-center gap-1 text-xs">
+              体重
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={3}
+                value={weightInput}
+                onChange={(event) => onWeightChange?.(event.target.value)}
+                placeholder="任意"
+                className="min-h-11 w-14 rounded-lg border border-neutral-300 px-2 text-right text-base"
+              />
+              kg
+            </label>
             <button
               type="button"
               disabled={disabled}
