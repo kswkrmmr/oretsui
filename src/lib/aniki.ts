@@ -9,6 +9,8 @@ export type AnikiScene =
   | "another"
   | "failed"
   | "start"
+  // 最後にセリフが変わってから、しばらく歩いたとき（#92）
+  | "enRoute"
   | "half"
   | "almost"
   | "offRoute"
@@ -21,24 +23,106 @@ export type AnikiScene =
   | "longer"
   | "shorter";
 
-/** 場面ごとのセリフ。文言は issue #41・#42 で人間と決めたもの */
-export const ANIKI_LINES: Record<AnikiScene, string> = {
-  ready: "今日はどれくらい歩く？決めてくれたら、道は俺に任せな",
-  searching: "いい道を探してくる。ちょっと待ってな",
-  found: "いい道を見つけたぞ。俺についてこい！",
-  another: "じゃあ、こっちの道はどうだ？",
-  failed: "すまん、道が見つからなかった。もう一回いいか？",
-  start: "よし、行くぞ！俺についてこい！",
-  half: "半分来たぞ。やるなー！",
-  almost: "あと少しだ。最後まで一緒に行こう",
-  offRoute: "おっと、そっちじゃないぞ。ルートに戻ろう",
-  backOnRoute: "そうそう、その調子！",
-  lost: "今どこにいるか分からないな…位置情報を許可してくれるか？",
-  finished: "おつかれ！いい散歩だったな",
-  reversed: "そっちか！ならこっちだ、俺についてこい！",
-  longer: "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
-  shorter: "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+/**
+ * 場面ごとのセリフ。先頭は issue #41・#42 などで人間と決めたもの。
+ * 2つ目以降は #92 で足したもの。場面が変わるたびに、この中から1つ選ぶ
+ */
+export const ANIKI_LINES: Record<AnikiScene, readonly string[]> = {
+  ready: [
+    "今日はどれくらい歩く？決めてくれたら、道は俺に任せな",
+    "さあ、今日はどこを歩こうか。時間を決めてくれ",
+    "散歩日和だな。どれくらい歩く？",
+  ],
+  searching: [
+    "いい道を探してくる。ちょっと待ってな",
+    "どの道がいいかな…ちょっと考えさせてくれ",
+    "とっておきの道を探してるところだ",
+  ],
+  found: [
+    "いい道を見つけたぞ。俺についてこい！",
+    "よし、いい道があったぞ。行こうぜ",
+    "今日はこの道でどうだ？",
+  ],
+  another: [
+    "じゃあ、こっちの道はどうだ？",
+    "こっちも悪くないぞ",
+    "気分を変えて、この道はどうだ？",
+  ],
+  failed: [
+    "すまん、道が見つからなかった。もう一回いいか？",
+    "悪い、うまく道が引けなかった。もう一回頼む",
+    "あれ、道が見つからないな…もう一回試してくれ",
+  ],
+  start: [
+    "よし、行くぞ！俺についてこい！",
+    "今日もいい散歩にしようぜ",
+    "準備はいいか？出発だ！",
+  ],
+  enRoute: [
+    "いいペースだな",
+    "この道、なかなかいいだろ？",
+    "まわりの景色も楽しもうぜ",
+    "無理せず、自分のペースでいいからな",
+    "水分はとってるか？",
+    "いい感じだ。その調子で行こう",
+  ],
+  half: [
+    "半分来たぞ。やるなー！",
+    "折り返しだ。いいペースだぞ",
+    "もう半分か。早いな！",
+  ],
+  almost: [
+    "あと少しだ。最後まで一緒に行こう",
+    "ゴールはもうすぐだぞ",
+    "ラストスパートだ！",
+  ],
+  offRoute: [
+    "おっと、そっちじゃないぞ。ルートに戻ろう",
+    "おーい、道が違うぞ。こっちだ",
+    "ちょっと待て、ルートから外れてるぞ",
+  ],
+  backOnRoute: [
+    "そうそう、その調子！",
+    "よし、戻ってきたな",
+    "それでいい。俺についてこい",
+  ],
+  lost: [
+    "今どこにいるか分からないな…位置情報を許可してくれるか？",
+    "見失っちまった…位置情報を確かめてくれ",
+  ],
+  finished: [
+    "おつかれ！いい散歩だったな",
+    "よく歩いたな！また一緒に行こうぜ",
+    "おつかれさん。ゆっくり休めよ",
+  ],
+  reversed: [
+    "そっちか！ならこっちだ、俺についてこい！",
+    "逆から行くのか。いいぜ、付き合うぞ",
+  ],
+  longer: [
+    "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
+    "ちょっと遠回りの道になったが、歩きがいがあるぞ",
+  ],
+  shorter: [
+    "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+    "ちょっと短めだが、軽く歩くにはちょうどいいぞ",
+  ],
 };
+
+/**
+ * 場面のセリフから1つ選ぶ（#92）。前回と同じセリフは続けて選ばない。
+ * random は 0 以上 1 未満を返す関数（テストで固定できるよう引数で渡す）
+ */
+export function pickLine(
+  scene: AnikiScene,
+  previous: string | null,
+  random: () => number,
+): string {
+  const lines = ANIKI_LINES[scene];
+  const candidates =
+    lines.length > 1 ? lines.filter((line) => line !== previous) : lines;
+  return candidates[Math.floor(random() * candidates.length)];
+}
 
 /** 兄貴の表情（#47）。画像は人間が用意したもの（#46） */
 export type AnikiFace = "normal" | "smile" | "fired-up" | "troubled";
@@ -50,6 +134,7 @@ const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
   another: "normal",
   found: "smile",
   start: "smile",
+  enRoute: "smile",
   half: "smile",
   backOnRoute: "smile",
   finished: "smile",
@@ -117,9 +202,16 @@ export function anikiScene({
 /** 残りがこの距離（m）以下になったら「あと少し」と言う */
 export const ALMOST_M = 300;
 
+/** 最後にセリフが変わってから、この距離（m）歩いたら道中の一言を言う（#92） */
+export const EN_ROUTE_M = 200;
+
 /** 散歩中の兄貴の一言と、もう言ったことの記録（#42） */
 export type WalkTalk = {
   scene: AnikiScene;
+  /** 一言ごとに増える番号（#92）。同じ場面をもう一度言うときも、セリフを選び直すため */
+  id: number;
+  /** 最後に一言を言ったときの、歩いた距離（m）（#92） */
+  saidAt: number;
   /** 「半分」「あと少し」は1回の散歩で1回だけ言う */
   saidHalf: boolean;
   saidAlmost: boolean;
@@ -131,15 +223,32 @@ export type WalkTalk = {
 export function startWalkTalk(): WalkTalk {
   return {
     scene: "start",
+    id: 0,
+    saidAt: 0,
     saidHalf: false,
     saidAlmost: false,
     offRoute: false,
   };
 }
 
+/** 新しい一言を言う。番号を進め、言ったときの距離を覚える */
+function say(
+  previous: WalkTalk,
+  scene: AnikiScene,
+  walked: number,
+  change: Partial<WalkTalk> = {},
+): WalkTalk {
+  return { ...previous, ...change, scene, id: previous.id + 1, saidAt: walked };
+}
+
+/** 逆回りに切り替えたときの一言（#52）。道中の一言までの距離は、逆回りの距離で数え直す（#92） */
+export function reversedWalkTalk(previous: WalkTalk, walked: number): WalkTalk {
+  return say(previous, "reversed", walked);
+}
+
 /**
  * 位置が届くたびに、次の一言を決める。外れているときはほかより優先する。
- * 言うことがなければ、前の一言のまま
+ * 言うことがなければ前の一言のままだが、しばらく歩いたら道中の一言を言う（#92）
  */
 export function nextWalkTalk(
   previous: WalkTalk,
@@ -150,13 +259,22 @@ export function nextWalkTalk(
   }: { walked: number; total: number; offRouteCount: number },
 ): WalkTalk {
   if (isOffRoute(offRouteCount))
-    return { ...previous, scene: "offRoute", offRoute: true };
+    // 外れている間は、同じ一言を言い続ける（位置が届くたびにセリフを変えない）
+    return previous.offRoute
+      ? previous
+      : say(previous, "offRoute", walked, { offRoute: true });
   if (previous.offRoute)
-    return { ...previous, scene: "backOnRoute", offRoute: false };
+    return say(previous, "backOnRoute", walked, { offRoute: false });
   // 短いルートで両方に当たるときは「あと少し」を言い、「半分」はもう言わない
   if (!previous.saidAlmost && total - walked <= ALMOST_M)
-    return { ...previous, scene: "almost", saidAlmost: true, saidHalf: true };
+    return say(previous, "almost", walked, {
+      saidAlmost: true,
+      saidHalf: true,
+    });
   if (!previous.saidHalf && walked >= total / 2)
-    return { ...previous, scene: "half", saidHalf: true };
+    return say(previous, "half", walked, { saidHalf: true });
+  // 「あと少し」のあとは、ゴールまで「あと少し」のまま
+  if (!previous.saidAlmost && walked - previous.saidAt >= EN_ROUTE_M)
+    return say(previous, "enRoute", walked);
   return previous;
 }

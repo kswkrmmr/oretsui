@@ -5,6 +5,9 @@ import {
   anikiFace,
   anikiFaceSrc,
   anikiScene,
+  EN_ROUTE_M,
+  pickLine,
+  reversedWalkTalk,
   routeFit,
   nextWalkTalk,
   startWalkTalk,
@@ -52,27 +55,116 @@ describe("anikiScene", () => {
 });
 
 describe("ANIKI_LINES", () => {
-  it("issue で決めた文言のまま", () => {
+  it("issue で決めた文言のまま。先頭は今までのセリフ、2つ目以降は #92 で足したもの", () => {
     expect(ANIKI_LINES).toEqual({
-      ready: "今日はどれくらい歩く？決めてくれたら、道は俺に任せな",
-      searching: "いい道を探してくる。ちょっと待ってな",
-      found: "いい道を見つけたぞ。俺についてこい！",
-      another: "じゃあ、こっちの道はどうだ？",
-      failed: "すまん、道が見つからなかった。もう一回いいか？",
+      ready: [
+        "今日はどれくらい歩く？決めてくれたら、道は俺に任せな",
+        "さあ、今日はどこを歩こうか。時間を決めてくれ",
+        "散歩日和だな。どれくらい歩く？",
+      ],
+      searching: [
+        "いい道を探してくる。ちょっと待ってな",
+        "どの道がいいかな…ちょっと考えさせてくれ",
+        "とっておきの道を探してるところだ",
+      ],
+      found: [
+        "いい道を見つけたぞ。俺についてこい！",
+        "よし、いい道があったぞ。行こうぜ",
+        "今日はこの道でどうだ？",
+      ],
+      another: [
+        "じゃあ、こっちの道はどうだ？",
+        "こっちも悪くないぞ",
+        "気分を変えて、この道はどうだ？",
+      ],
+      failed: [
+        "すまん、道が見つからなかった。もう一回いいか？",
+        "悪い、うまく道が引けなかった。もう一回頼む",
+        "あれ、道が見つからないな…もう一回試してくれ",
+      ],
       // 散歩中（#42）
-      start: "よし、行くぞ！俺についてこい！",
-      half: "半分来たぞ。やるなー！",
-      almost: "あと少しだ。最後まで一緒に行こう",
-      offRoute: "おっと、そっちじゃないぞ。ルートに戻ろう",
-      backOnRoute: "そうそう、その調子！",
-      lost: "今どこにいるか分からないな…位置情報を許可してくれるか？",
-      finished: "おつかれ！いい散歩だったな",
+      start: [
+        "よし、行くぞ！俺についてこい！",
+        "今日もいい散歩にしようぜ",
+        "準備はいいか？出発だ！",
+      ],
+      // 道中（#92）
+      enRoute: [
+        "いいペースだな",
+        "この道、なかなかいいだろ？",
+        "まわりの景色も楽しもうぜ",
+        "無理せず、自分のペースでいいからな",
+        "水分はとってるか？",
+        "いい感じだ。その調子で行こう",
+      ],
+      half: [
+        "半分来たぞ。やるなー！",
+        "折り返しだ。いいペースだぞ",
+        "もう半分か。早いな！",
+      ],
+      almost: [
+        "あと少しだ。最後まで一緒に行こう",
+        "ゴールはもうすぐだぞ",
+        "ラストスパートだ！",
+      ],
+      offRoute: [
+        "おっと、そっちじゃないぞ。ルートに戻ろう",
+        "おーい、道が違うぞ。こっちだ",
+        "ちょっと待て、ルートから外れてるぞ",
+      ],
+      backOnRoute: [
+        "そうそう、その調子！",
+        "よし、戻ってきたな",
+        "それでいい。俺についてこい",
+      ],
+      lost: [
+        "今どこにいるか分からないな…位置情報を許可してくれるか？",
+        "見失っちまった…位置情報を確かめてくれ",
+      ],
+      finished: [
+        "おつかれ！いい散歩だったな",
+        "よく歩いたな！また一緒に行こうぜ",
+        "おつかれさん。ゆっくり休めよ",
+      ],
       // 逆回りに切り替えたとき（#52）
-      reversed: "そっちか！ならこっちだ、俺についてこい！",
+      reversed: [
+        "そっちか！ならこっちだ、俺についてこい！",
+        "逆から行くのか。いいぜ、付き合うぞ",
+      ],
       // ルートの長さが目標の ±10% に入らなかったとき（#72）
-      longer: "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
-      shorter: "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+      longer: [
+        "いい道を見つけたぞ。ただ、ちょっと長めになっちまった",
+        "ちょっと遠回りの道になったが、歩きがいがあるぞ",
+      ],
+      shorter: [
+        "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
+        "ちょっと短めだが、軽く歩くにはちょうどいいぞ",
+      ],
     });
+  });
+});
+
+describe("pickLine（#92）", () => {
+  it("乱数を固定すると、決まったセリフを選ぶ", () => {
+    expect(pickLine("half", null, () => 0)).toBe("半分来たぞ。やるなー！");
+    expect(pickLine("half", null, () => 0.5)).toBe(
+      "折り返しだ。いいペースだぞ",
+    );
+    expect(pickLine("half", null, () => 0.99)).toBe("もう半分か。早いな！");
+  });
+
+  it("前回と同じセリフは続けて選ばない", () => {
+    const first = ANIKI_LINES.enRoute[0];
+    for (const value of [0, 0.3, 0.6, 0.99])
+      expect(pickLine("enRoute", first, () => value)).not.toBe(first);
+    // 残りの候補の先頭を選ぶ
+    expect(pickLine("enRoute", first, () => 0)).toBe(ANIKI_LINES.enRoute[1]);
+  });
+
+  it("前回が別の場面のセリフなら、すべての候補から選ぶ", () => {
+    expect(pickLine("found", ANIKI_LINES.searching[0], () => 0)).toBe(
+      ANIKI_LINES.found[0],
+    );
   });
 });
 
@@ -100,7 +192,8 @@ describe("散歩中の一言", () => {
         { walked: 1200 },
         { walked: 1700 },
       ]),
-    ).toEqual(["start", "start", "half", "half", "almost"]);
+      // 「半分」から 200m 歩いたら道中の一言（#92）
+    ).toEqual(["start", "start", "half", "enRoute", "almost"]);
   });
 
   it(`「半分」と「あと少し（残り ${ALMOST_M}m）」は1回の散歩で1回だけ`, () => {
@@ -153,6 +246,116 @@ describe("散歩中の一言", () => {
   });
 });
 
+describe("道中の一言（#92）", () => {
+  const TOTAL = 3000;
+  function talk(updates: { walked: number; offRouteCount?: number }[]) {
+    let current: WalkTalk = startWalkTalk();
+    const said = [{ scene: current.scene, id: current.id }];
+    for (const { walked, offRouteCount = 0 } of updates) {
+      current = nextWalkTalk(current, { walked, total: TOTAL, offRouteCount });
+      said.push({ scene: current.scene, id: current.id });
+    }
+    return said;
+  }
+
+  it(`最後に一言を言ってから ${EN_ROUTE_M}m 歩くと道中の一言になり、さらに ${EN_ROUTE_M}m ごとに言い直す`, () => {
+    expect(
+      talk([
+        { walked: 150 },
+        { walked: 200 },
+        { walked: 350 },
+        { walked: 400 },
+      ]),
+    ).toEqual([
+      { scene: "start", id: 0 },
+      { scene: "start", id: 0 },
+      { scene: "enRoute", id: 1 },
+      { scene: "enRoute", id: 1 },
+      // 同じ道中でも番号が進むので、セリフを選び直す
+      { scene: "enRoute", id: 2 },
+    ]);
+  });
+
+  it("半分・外れた・戻ったのあとも、そこから数え直す", () => {
+    const scenes = talk([
+      { walked: 1500 },
+      { walked: 1650 },
+      { walked: 1700 },
+      { walked: 1750, offRouteCount: 2 },
+      { walked: 1900 },
+      { walked: 2050 },
+      { walked: 2100 },
+    ]).map(({ scene }) => scene);
+    expect(scenes).toEqual([
+      "start",
+      "half",
+      "half",
+      "enRoute",
+      "offRoute",
+      "backOnRoute",
+      "backOnRoute",
+      "enRoute",
+    ]);
+  });
+
+  it(`外れてから ${EN_ROUTE_M}m 以上歩いて戻っても、道中ではなく「戻った」を言う`, () => {
+    const scenes = talk([
+      { walked: 100, offRouteCount: 2 },
+      { walked: 400 },
+    ]).map(({ scene }) => scene);
+    expect(scenes).toEqual(["start", "offRoute", "backOnRoute"]);
+  });
+
+  it("外れている間は、位置が届いても一言を言い直さない", () => {
+    const said = talk([
+      { walked: 100, offRouteCount: 2 },
+      { walked: 400, offRouteCount: 3 },
+      { walked: 700, offRouteCount: 4 },
+    ]);
+    expect(said.slice(1)).toEqual([
+      { scene: "offRoute", id: 1 },
+      { scene: "offRoute", id: 1 },
+      { scene: "offRoute", id: 1 },
+    ]);
+  });
+
+  it("「あと少し」のあとは、道中の一言にならない", () => {
+    const scenes = talk([
+      { walked: 2700 },
+      { walked: 2900 },
+      { walked: 3000 },
+    ]).map(({ scene }) => scene);
+    expect(scenes).toEqual(["start", "almost", "almost", "almost"]);
+  });
+
+  it("逆回りに切り替えたら、逆回りの距離から数え直す", () => {
+    let current = nextWalkTalk(startWalkTalk(), {
+      walked: 180,
+      total: TOTAL,
+      offRouteCount: 0,
+    });
+    // 逆回りでは歩いた距離が測り直されて小さくなる
+    current = reversedWalkTalk(current, 40);
+    expect(current).toMatchObject({ scene: "reversed", id: 1, saidAt: 40 });
+    current = nextWalkTalk(current, {
+      walked: 200,
+      total: TOTAL,
+      offRouteCount: 0,
+    });
+    expect(current.scene).toBe("reversed");
+    current = nextWalkTalk(current, {
+      walked: 240,
+      total: TOTAL,
+      offRouteCount: 0,
+    });
+    expect(current).toMatchObject({ scene: "enRoute", id: 2 });
+  });
+
+  it("道中の表情は笑顔", () => {
+    expect(anikiFace("enRoute")).toBe("smile");
+  });
+});
+
 describe("兄貴の表情（#47）", () => {
   it("12の場面すべてに、issue で決めた表情が選ばれる", () => {
     expect({
@@ -194,7 +397,7 @@ describe("兄貴の表情（#47）", () => {
 
 describe("逆回りに切り替えたときの一言（#52）", () => {
   it("issue で決めたセリフと、燃えている表情", () => {
-    expect(ANIKI_LINES.reversed).toBe(
+    expect(ANIKI_LINES.reversed[0]).toBe(
       "そっちか！ならこっちだ、俺についてこい！",
     );
     expect(anikiFace("reversed")).toBe("fired-up");
