@@ -8,6 +8,18 @@ const mapContainer = (page: Page) => page.getByTestId("map").first();
 const faceOf = (face: string) =>
   new RegExp(encodeURIComponent(`/aniki/${face}.png`));
 
+// 道中の一言の候補（#92）。どれを言うかは、前回のセリフによって変わる
+const EN_ROUTE_LINES = new RegExp(
+  `^(${[
+    "いいペースだな",
+    "この道、なかなかいいだろ？",
+    "まわりの景色も楽しもうぜ",
+    "無理せず、自分のペースでいいからな",
+    "水分はとってるか？",
+    "いい感じだ。その調子で行こう",
+  ].join("|")})$`,
+);
+
 const ROUTE = {
   distanceMeters: 2134,
   durationSeconds: 1620,
@@ -152,7 +164,7 @@ test("兄貴の吹き出しは「現在地に戻る」ボタンや条件のシ�
   await check();
 });
 
-test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る → 終了 の順に兄貴のセリフが入れ替わる", async ({
+test("散歩中、出発 → 道中 → 半分 → 道中 → 残り 300m → 外れる → 戻る → 終了 の順に兄貴のセリフが入れ替わる", async ({
   page,
   context,
 }) => {
@@ -178,18 +190,22 @@ test("散歩中、出発 → 半分 → 残り 300m → 外れる → 戻る →
   // 北へ進み、東の区間へ。進み具合は一度に 300m 先までしか探さないので、少しずつ動かす
   await moveTo(35.6915, 139.6917);
   await expect(progress).toContainText("歩いた 222 m");
+  // 出発の一言から 200m 歩いたので、道中の一言になる（#92）。乱数を固定しているので先頭の候補
+  await expect(line).toHaveText("いいペースだな");
   await moveTo(35.6935, 139.6917);
   await moveTo(35.6935, 139.694);
   // 位置の更新が届いたことを確かめてから次へ進む（約 650m）
   await expect(progress).toContainText(/歩いた 6[45]\d m/);
-  await expect(line).toHaveText("よし、行くぞ！俺についてこい！");
+  // 半分の手前でも、出発の一言のままにはしない（#92）
+  await expect(line).toHaveText(EN_ROUTE_LINES);
   await moveTo(35.6935, 139.6955);
   await expect(line).toHaveText("半分来たぞ。やるなー！");
 
   // 東の角から出発点へ戻る区間
   await moveTo(35.6935, 139.6967);
   await moveTo(35.6919, 139.6947);
-  await expect(line).toHaveText("半分来たぞ。やるなー！");
+  // 「半分」から 200m 以上歩いたので、道中の一言になる（#92）
+  await expect(line).toHaveText(EN_ROUTE_LINES);
   await moveTo(35.69127, 139.69392);
   await expect(line).toHaveText("あと少しだ。最後まで一緒に行こう");
   await expect(page.getByRole("img", { name: "兄貴" })).toHaveAttribute(
