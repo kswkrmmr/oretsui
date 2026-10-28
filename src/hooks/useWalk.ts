@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { nextWalkTalk, startWalkTalk, type WalkTalk } from "@/lib/aniki";
+import {
+  nextWalkTalk,
+  reversedWalkTalk,
+  startWalkTalk,
+  type WalkTalk,
+} from "@/lib/aniki";
 import type { LatLng } from "@/lib/start-point";
 import {
   initialWalkDirection,
@@ -112,7 +117,7 @@ export function useWalk(path: LatLng[]) {
             offRouteCount,
             // 逆回りに切り替えたときは、兄貴がそのことを言う
             talk: switched
-              ? { ...previous.talk, scene: "reversed" }
+              ? reversedWalkTalk(previous.talk, walked)
               : nextWalkTalk(previous.talk, {
                   walked,
                   total: length,

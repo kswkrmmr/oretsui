@@ -154,6 +154,11 @@ async function generateRoute() {
 }
 const NOTICE = "位置情報が使えません。地図をタップして出発点を選んでください";
 
+// 兄貴のセリフは候補から乱数で選ぶ（#92）。テストでは先頭（今までのセリフ）が選ばれるよう固定する
+beforeEach(() => {
+  vi.spyOn(Math, "random").mockReturnValue(0);
+});
+
 describe("MapView", () => {
   beforeEach(() => {
     mocks.mapProps = null;
@@ -527,11 +532,14 @@ describe("MapView", () => {
   });
 
   it("再試行は、失敗したときと同じ回転角で作り直す", async () => {
-    vi.spyOn(Math, "random").mockReturnValueOnce(0.25).mockReturnValue(0.75);
+    // 兄貴のセリフ選び（#92）も乱数を使うので、呼ばれる順番ではなく、場面ごとに乱数の値を変える。
+    // 再試行で回転角を選び直すと、0.75 から別の角度（270°）になってしまう
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.25);
     fetchMock.mockResolvedValueOnce(routeResponse(502));
     render(<MapView apiKey="test-key" />);
     succeed();
     await generateRoute();
+    random.mockReturnValue(0.75);
     fetchMock.mockResolvedValueOnce(routeResponse());
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "再試行" }));

@@ -211,7 +211,12 @@ export function MapView({ apiKey }: Props) {
             <div className="flex w-full items-end gap-3 px-4">
               {scene ? (
                 <div className="pointer-events-auto flex min-w-0 flex-1">
-                  <Aniki scene={scene} />
+                  <Aniki
+                    scene={scene}
+                    talkId={
+                      walk.state.status === "walking" ? walk.state.talk.id : 0
+                    }
+                  />
                 </div>
               ) : (
                 <div className="flex-1" />

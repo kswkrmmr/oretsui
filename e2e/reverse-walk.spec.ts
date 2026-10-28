@@ -19,6 +19,10 @@ const SQUARE_ROUTE = {
 const eastOf = (m: number) => HERE.longitude + m / 90_300;
 
 test.beforeEach(async ({ page, context }) => {
+  // 兄貴のセリフは候補から乱数で選ぶ（#92）。先頭（今までのセリフ）が選ばれるよう固定する
+  await page.addInitScript(() => {
+    Math.random = () => 0;
+  });
   // テストで本物の Google Maps を読み込まない
   await page.route(/maps\.googleapis\.com/, (route) => route.abort());
   await page.route("**/api/route", (route) =>
