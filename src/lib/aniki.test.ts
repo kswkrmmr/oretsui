@@ -298,6 +298,14 @@ describe("道中の一言（#92）", () => {
     ]);
   });
 
+  it(`外れてから ${EN_ROUTE_M}m 以上歩いて戻っても、道中ではなく「戻った」を言う`, () => {
+    const scenes = talk([
+      { walked: 100, offRouteCount: 2 },
+      { walked: 400 },
+    ]).map(({ scene }) => scene);
+    expect(scenes).toEqual(["start", "offRoute", "backOnRoute"]);
+  });
+
   it("外れている間は、位置が届いても一言を言い直さない", () => {
     const said = talk([
       { walked: 100, offRouteCount: 2 },
