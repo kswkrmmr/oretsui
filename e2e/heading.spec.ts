@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startWalk } from "./helpers";
+import { finishWalk, startWalk } from "./helpers";
 
 // 散歩中、向いている方角を上にするか北を上にするかを切り替える（#69）。
 // テストの環境には方角のセンサーがないので、切り替えのボタンと状態だけを確かめる
@@ -55,6 +55,6 @@ test("出発すると方位のボタンが出て、押すと地図の向きの�
   await page.getByRole("button", { name: "向いている方角を上にする" }).click();
   await expect(map).toHaveAttribute("data-heading-mode", "device");
 
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(map).not.toHaveAttribute("data-heading-mode");
 });

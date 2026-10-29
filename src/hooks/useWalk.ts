@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  homewardWalkTalk,
   nextWalkTalk,
   reversedWalkTalk,
   startWalkTalk,
   type WalkTalk,
 } from "@/lib/aniki";
+import {
+  nextReturnWalk,
+  startReturnWalk,
+  type ReturnWalk,
+} from "@/lib/return-walk";
 import type { LatLng } from "@/lib/start-point";
 import {
   initialWalkDirection,
@@ -34,6 +40,8 @@ export type WalkState =
       direction: WalkDirection;
       /** 出発してから位置の更新を受け取った回数（#66。E2E で更新が届いたことを確かめるため） */
       updates: number;
+      /** 途中で切り上げて帰っているときの帰り道（#93）。帰っていなければ null */
+      homeward: ReturnWalk | null;
     }
   | { status: "unavailable" };
 
@@ -92,12 +100,35 @@ export function useWalk(path: LatLng[]) {
       talk: startWalkTalk(),
       direction: initialWalkDirection(),
       updates: 0,
+      homeward: null,
     });
     watchId.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
         const position = { lat: coords.latitude, lng: coords.longitude };
         setState((previous) => {
           if (previous.status !== "walking") return previous;
+          // 帰り道では、進み具合・外れ・兄貴の一言を帰り道に対して数える。歩いた距離は通算（#93）
+          if (previous.homeward) {
+            const { walk: homeward, offRouteCount } = nextReturnWalk(
+              previous.homeward,
+              position,
+              coords.accuracy,
+              previous.offRouteCount,
+            );
+            return {
+              ...previous,
+              position,
+              walked: homeward.baseWalked + homeward.walked,
+              offRouteCount,
+              talk: nextWalkTalk(previous.talk, {
+                walked: homeward.walked,
+                total: homeward.total,
+                offRouteCount,
+              }),
+              updates: previous.updates + 1,
+              homeward,
+            };
+          }
           const { state: direction, switched } = nextWalkDirection(
             previous.direction,
             path,
@@ -125,6 +156,7 @@ export function useWalk(path: LatLng[]) {
                 }),
             direction,
             updates: previous.updates + 1,
+            homeward: null,
           };
         });
       },
@@ -137,6 +169,20 @@ export function useWalk(path: LatLng[]) {
     );
   }, [path]);
 
+  /** 途中で切り上げて、帰り道を歩き始める（#93） */
+  const goHome = useCallback((homePath: LatLng[]) => {
+    setState((previous) =>
+      previous.status === "walking"
+        ? {
+            ...previous,
+            offRouteCount: 0,
+            talk: homewardWalkTalk(previous.talk),
+            homeward: startReturnWalk(homePath, previous.walked),
+          }
+        : previous,
+    );
+  }, []);
+
   // 画面を離れるときは追いかけるのをやめる
   useEffect(
     () => () => {
@@ -146,12 +192,29 @@ export function useWalk(path: LatLng[]) {
     [],
   );
 
-  // 今の向きで歩くルート。逆回りなら点の並びを逆にしたもの（兄貴の位置などに使う）
-  const reversed = state.status === "walking" && state.direction.reversed;
-  const activePath = useMemo(
+  // 今歩いているルート。逆回りなら点の並びを逆にしたもの、帰っているなら帰り道（兄貴の位置などに使う）
+  const homeward = state.status === "walking" ? state.homeward : null;
+  const reversed =
+    state.status === "walking" && !homeward && state.direction.reversed;
+  const forwardPath = useMemo(
     () => (reversed ? reversePath(path) : path),
     [path, reversed],
   );
+  const activePath = homeward?.path ?? forwardPath;
+  // 今歩いているルートの上で歩いた距離（帰り道なら帰り道の分だけ）
+  const activeWalked =
+    state.status !== "walking" ? 0 : (homeward?.walked ?? state.walked);
 
-  return { state, total, start, stop, reversed, activePath, startedAt };
+  return {
+    state,
+    // 帰っているときは帰り道の長さ
+    total: homeward?.total ?? total,
+    start,
+    stop,
+    goHome,
+    reversed,
+    activePath,
+    activeWalked,
+    startedAt,
+  };
 }

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   computeWalkingRoute,
+  computeWalkingRouteTo,
   ROUTES_API_URL,
   RoutesApiError,
 } from "./routes-api";
@@ -81,5 +82,42 @@ describe("computeWalkingRoute", () => {
     await expect(
       computeWalkingRoute("server-key", START, WAYPOINTS, fetchMock),
     ).rejects.toBeInstanceOf(RoutesApiError);
+  });
+});
+
+describe("computeWalkingRouteTo（帰り道。#93）", () => {
+  afterEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it("今いる場所から出発点までの、経由地のない片道の徒歩ルートを頼む", async () => {
+    respond({
+      routes: [
+        {
+          distanceMeters: 800,
+          duration: "600s",
+          polyline: { encodedPolyline: "home" },
+        },
+      ],
+    });
+    const HERE = { lat: 35.7, lng: 139.7 };
+    const route = await computeWalkingRouteTo(
+      "server-key",
+      HERE,
+      START,
+      fetchMock,
+    );
+    const body = JSON.parse(fetchMock.mock.lastCall![1]!.body as string);
+    expect(body).toEqual({
+      origin: latLng(HERE),
+      destination: latLng(START),
+      intermediates: [],
+      travelMode: "WALK",
+    });
+    expect(route).toEqual({
+      distanceMeters: 800,
+      durationSeconds: 600,
+      encodedPolyline: "home",
+    });
   });
 });

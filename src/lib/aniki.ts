@@ -21,7 +21,11 @@ export type AnikiScene =
   | "reversed"
   // ルートの長さが目標の ±10% に入らなかったとき（#72）
   | "longer"
-  | "shorter";
+  | "shorter"
+  // 途中で切り上げて帰るとき（#93）。帰り道を探している・作れなかった・できた
+  | "homewardSearching"
+  | "homewardFailed"
+  | "homeward";
 
 /**
  * 場面ごとのセリフ。先頭は issue #41・#42 などで人間と決めたもの。
@@ -107,6 +111,9 @@ export const ANIKI_LINES: Record<AnikiScene, readonly string[]> = {
     "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
     "ちょっと短めだが、軽く歩くにはちょうどいいぞ",
   ],
+  homewardSearching: ["近道を探してくる。ちょっと待ってな"],
+  homewardFailed: ["すまん、帰り道が見つからなかった。もう一回いいか？"],
+  homeward: ["今日はここまでにしとくか。帰り道は任せな"],
 };
 
 /**
@@ -145,6 +152,9 @@ const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
   lost: "troubled",
   longer: "troubled",
   shorter: "troubled",
+  homewardSearching: "normal",
+  homewardFailed: "troubled",
+  homeward: "smile",
 };
 
 export function anikiFace(scene: AnikiScene): AnikiFace {
@@ -244,6 +254,18 @@ function say(
 /** 逆回りに切り替えたときの一言（#52）。道中の一言までの距離は、逆回りの距離で数え直す（#92） */
 export function reversedWalkTalk(previous: WalkTalk, walked: number): WalkTalk {
   return say(previous, "reversed", walked);
+}
+
+/**
+ * 帰り道に入ったときの一言（#93）。帰り道の距離は 0 から数え直す。
+ * 帰り道では「半分」は言わず、「あと少し」は帰り道の残りで言う
+ */
+export function homewardWalkTalk(previous: WalkTalk): WalkTalk {
+  return say(previous, "homeward", 0, {
+    saidHalf: true,
+    saidAlmost: false,
+    offRoute: false,
+  });
 }
 
 /**

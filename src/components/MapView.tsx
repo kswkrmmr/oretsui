@@ -18,6 +18,7 @@ import { useStartPoint } from "@/hooks/useStartPoint";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useWalk, type WalkRecord, type WalkState } from "@/hooks/useWalk";
 import { useWeight } from "@/hooks/useWeight";
+import { requestReturnRoute } from "@/lib/route-request";
 import { walkingCalories } from "@/lib/calories";
 import { formatDistance, formatDuration, formatElapsed } from "@/lib/format";
 import {
@@ -67,6 +68,7 @@ export function MapView({ apiKey }: Props) {
   );
   const walk = useWalk(path);
   const walking = walk.state.status !== "idle";
+  const homeward = walk.state.status === "walking" ? walk.state.homeward : null;
   // 散歩中の地図の向き（#69）。出発したら「向いている方角が上」、ボタンで「北が上」と切り替える
   const [headingMode, setHeadingMode] = useState<"device" | "north">("device");
   const deviceHeading = useDeviceHeading(walking);
@@ -88,9 +90,31 @@ export function MapView({ apiKey }: Props) {
   // 終了したときの記録（#68）。まとめと「おつかれ」は、次の操作まで出しておく
   const [lastWalk, setLastWalk] = useState<WalkRecord | null>(null);
   const finished = lastWalk !== null;
+  // 途中で切り上げて帰る（#93）。「終了」で出す選択肢と、帰り道を作っているかどうか
+  const [endMenu, setEndMenu] = useState(false);
+  const [homewardStatus, setHomewardStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle");
+  const goHome = async () => {
+    const from = walkPosition ?? state.current;
+    setEndMenu(false);
+    if (!from || !start) return setHomewardStatus("error");
+    setHomewardStatus("loading");
+    try {
+      const route = await requestReturnRoute(from, start.position);
+      walk.goHome(decodePolyline(route.encodedPolyline));
+      setHomewardStatus("idle");
+    } catch {
+      setHomewardStatus("error");
+    }
+  };
   const scene: AnikiScene | null =
     walk.state.status === "walking"
-      ? walk.state.talk.scene
+      ? homewardStatus === "loading"
+        ? "homewardSearching"
+        : homewardStatus === "error"
+          ? "homewardFailed"
+          : walk.state.talk.scene
       : walk.state.status === "unavailable"
         ? "lost"
         : finished && route.status === "done"
@@ -114,10 +138,7 @@ export function MapView({ apiKey }: Props) {
       }
     : {};
   // 兄貴は地図の上で、自分がルート上で歩いた距離の少し先にいる（#51）
-  const aniki = anikiPosition(
-    walk.activePath,
-    walk.state.status === "walking" ? walk.state.walked : 0,
-  );
+  const aniki = anikiPosition(walk.activePath, walk.activeWalked);
   const anikiAttributes = aniki
     ? { "data-aniki-lat": aniki.lat, "data-aniki-lng": aniki.lng }
     : {};
@@ -182,7 +203,11 @@ export function MapView({ apiKey }: Props) {
                 </AdvancedMarker>
               )}
               {path.length > 0 && (
-                <RouteLine path={path} reversed={walk.reversed} />
+                // 帰っているときは帰り道の線にする（#93）
+                <RouteLine
+                  path={homeward ? walk.activePath : path}
+                  reversed={walk.reversed}
+                />
               )}
               {aniki && (
                 <AdvancedMarker position={aniki} title="兄貴" zIndex={10}>
@@ -278,7 +303,10 @@ export function MapView({ apiKey }: Props) {
                     state={route}
                     collapsed={collapsed}
                     walk={walk.state}
-                    total={walk.total}
+                    remaining={walk.total - walk.activeWalked}
+                    homeward={homeward !== null}
+                    endMenu={endMenu}
+                    homewardFailed={homewardStatus === "error"}
                     speed={routeSpeed}
                     weight={weight.weight}
                     startedAt={walk.startedAt}
@@ -295,8 +323,13 @@ export function MapView({ apiKey }: Props) {
                       walk.start();
                     }}
                     onStopWalk={() => {
+                      setEndMenu(false);
+                      setHomewardStatus("idle");
                       setLastWalk(walk.stop());
                     }}
+                    onOpenEndMenu={() => setEndMenu(true)}
+                    onCloseEndMenu={() => setEndMenu(false)}
+                    onGoHome={() => void goHome()}
                     onRetry={() => {
                       setShowConditions(false);
                       retry();
@@ -400,7 +433,10 @@ function RouteStatus({
   state,
   collapsed,
   walk,
-  total,
+  remaining,
+  homeward,
+  endMenu,
+  homewardFailed,
   speed,
   weight,
   startedAt,
@@ -408,6 +444,9 @@ function RouteStatus({
   lastWalk,
   onStartWalk,
   onStopWalk,
+  onOpenEndMenu,
+  onCloseEndMenu,
+  onGoHome,
   onRetry,
   onAnother,
   onEditConditions,
@@ -415,7 +454,12 @@ function RouteStatus({
   state: LoopRouteState;
   collapsed: boolean;
   walk: WalkState;
-  total: number;
+  /** 残りの距離（m）。帰っているときは帰り道の残り（#93） */
+  remaining: number;
+  homeward: boolean;
+  /** 「終了」を押して、終わり方の選択肢を出しているか（#93） */
+  endMenu: boolean;
+  homewardFailed: boolean;
   speed: WalkSpeed;
   weight: number | null;
   startedAt: number | null;
@@ -423,6 +467,9 @@ function RouteStatus({
   lastWalk: WalkRecord | null;
   onStartWalk: () => void;
   onStopWalk: () => void;
+  onOpenEndMenu: () => void;
+  onCloseEndMenu: () => void;
+  onGoHome: () => void;
   onRetry: () => void;
   onAnother: () => void;
   onEditConditions: () => void;
@@ -447,10 +494,8 @@ function RouteStatus({
           <p data-testid="walk-progress" className="text-center text-sm">
             歩いた{" "}
             <strong className="text-base">{formatDistance(walk.walked)}</strong>{" "}
-            / 残り{" "}
-            <strong className="text-base">
-              {formatDistance(total - walk.walked)}
-            </strong>
+            / {homeward ? "帰り道の残り" : "残り"}{" "}
+            <strong className="text-base">{formatDistance(remaining)}</strong>
           </p>
         ) : (
           <p role="alert" className="text-center text-sm text-red-700">
@@ -467,14 +512,32 @@ function RouteStatus({
           </p>
         )}
         {startedAt !== null && <WalkElapsed startedAt={startedAt} />}
-        <button
-          type="button"
-          onClick={onStopWalk}
-          // 歩きながらでも押しやすいよう、横幅いっぱい・高さ 56px（#79）
-          className="min-h-14 w-full rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
-        >
-          終了
-        </button>
+        {homewardFailed && (
+          <div className="flex items-center gap-3">
+            <p role="alert" className="flex-1 text-sm text-red-700">
+              帰り道を作れませんでした
+            </p>
+            <button
+              type="button"
+              onClick={onGoHome}
+              className="min-h-11 rounded-lg border border-red-300 px-4 text-sm font-bold text-red-700 active:bg-red-50"
+            >
+              再試行
+            </button>
+          </div>
+        )}
+        {endMenu ? (
+          // 終わり方を選ぶ（#93）。帰っているときは「出発点まで帰る」を出さない
+          <>
+            <WalkButton onClick={onStopWalk}>ここで終わる</WalkButton>
+            {walk.status === "walking" && !homeward && (
+              <WalkButton onClick={onGoHome}>出発点まで帰る</WalkButton>
+            )}
+            <WalkButton onClick={onCloseEndMenu}>やめる</WalkButton>
+          </>
+        ) : (
+          <WalkButton onClick={onOpenEndMenu}>終了</WalkButton>
+        )}
       </>
     );
   }
@@ -564,6 +627,25 @@ function RouteStatus({
     );
   }
   return null;
+}
+
+/** 散歩中のボタン。歩きながらでも押しやすいよう、横幅いっぱい・高さ 56px（#79） */
+function WalkButton({
+  onClick,
+  children,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-h-14 w-full rounded-xl border border-neutral-300 font-bold text-neutral-700 active:bg-neutral-100"
+    >
+      {children}
+    </button>
+  );
 }
 
 /** 散歩中、現在地が変わるたびに地図の中心を現在地へ移す */

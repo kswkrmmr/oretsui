@@ -28,3 +28,26 @@ export async function requestLoopRoute(
   }
   return (await response.json()) as LoopRouteResponse;
 }
+
+/** 帰り道（POST /api/return）の返事（#93） */
+export type ReturnRouteResponse = {
+  distanceMeters: number;
+  durationSeconds: number;
+  encodedPolyline: string;
+};
+
+/** 今いる場所（from）から出発点（to）までの帰り道をサーバーに頼む。失敗したら例外を投げる（#93） */
+export async function requestReturnRoute(
+  from: LatLng,
+  to: LatLng,
+): Promise<ReturnRouteResponse> {
+  const response = await fetch("/api/return", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!response.ok) {
+    throw new Error(`帰り道の検索に失敗しました（${response.status}）`);
+  }
+  return (await response.json()) as ReturnRouteResponse;
+}
