@@ -53,3 +53,11 @@ export function nextReturnWalk(
     ),
   };
 }
+
+/**
+ * 元のルートの残り（m）が、帰り道（m）より短いか（#96）。
+ * 短ければ、すぐには帰り道にせず、このまま進むかどうかを選んでもらう
+ */
+export function closerAhead(remaining: number, homeward: number): boolean {
+  return remaining < homeward;
+}

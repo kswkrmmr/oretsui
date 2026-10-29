@@ -145,6 +145,8 @@ describe("ANIKI_LINES", () => {
       homewardSearching: ["近道を探してくる。ちょっと待ってな"],
       homewardFailed: ["すまん、帰り道が見つからなかった。もう一回いいか？"],
       homeward: ["今日はここまでにしとくか。帰り道は任せな"],
+      // 元のルートの残りのほうが近いとき（#96）
+      closerAhead: ["このまま進んだほうが近いぞ"],
     });
   });
 });
@@ -479,5 +481,12 @@ describe("帰り道の一言（#93）", () => {
     talk = homewardWalkTalk(talk);
     talk = nextWalkTalk(talk, { walked: 600, total: 800, offRouteCount: 0 });
     expect(talk.scene).toBe("almost");
+  });
+});
+
+describe("元のルートの残りのほうが近いとき（#96）", () => {
+  it("「このまま進んだほうが近いぞ」と、燃えている表情で言う", () => {
+    expect(ANIKI_LINES.closerAhead).toEqual(["このまま進んだほうが近いぞ"]);
+    expect(anikiFace("closerAhead")).toBe("fired-up");
   });
 });

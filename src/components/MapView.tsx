@@ -19,6 +19,7 @@ import { useWakeLock } from "@/hooks/useWakeLock";
 import { useWalk, type WalkRecord, type WalkState } from "@/hooks/useWalk";
 import { useWeight } from "@/hooks/useWeight";
 import { requestReturnRoute } from "@/lib/route-request";
+import { closerAhead } from "@/lib/return-walk";
 import { walkingCalories } from "@/lib/calories";
 import { formatDistance, formatDuration, formatElapsed } from "@/lib/format";
 import {
@@ -95,6 +96,8 @@ export function MapView({ apiKey }: Props) {
   const [homewardStatus, setHomewardStatus] = useState<
     "idle" | "loading" | "error"
   >("idle");
+  // 元のルートの残りのほうが近いとき、選んでもらうまで取っておく帰り道（#96）
+  const [pendingHome, setPendingHome] = useState<LatLng[] | null>(null);
   const goHome = async () => {
     const from = walkPosition ?? state.current;
     setEndMenu(false);
@@ -102,7 +105,10 @@ export function MapView({ apiKey }: Props) {
     setHomewardStatus("loading");
     try {
       const route = await requestReturnRoute(from, start.position);
-      walk.goHome(decodePolyline(route.encodedPolyline));
+      const homePath = decodePolyline(route.encodedPolyline);
+      if (closerAhead(walk.total - walk.activeWalked, route.distanceMeters))
+        setPendingHome(homePath);
+      else walk.goHome(homePath);
       setHomewardStatus("idle");
     } catch {
       setHomewardStatus("error");
@@ -110,11 +116,13 @@ export function MapView({ apiKey }: Props) {
   };
   const scene: AnikiScene | null =
     walk.state.status === "walking"
-      ? homewardStatus === "loading"
-        ? "homewardSearching"
-        : homewardStatus === "error"
-          ? "homewardFailed"
-          : walk.state.talk.scene
+      ? pendingHome
+        ? "closerAhead"
+        : homewardStatus === "loading"
+          ? "homewardSearching"
+          : homewardStatus === "error"
+            ? "homewardFailed"
+            : walk.state.talk.scene
       : walk.state.status === "unavailable"
         ? "lost"
         : finished && route.status === "done"
@@ -307,6 +315,12 @@ export function MapView({ apiKey }: Props) {
                     homeward={homeward !== null}
                     endMenu={endMenu}
                     homewardFailed={homewardStatus === "error"}
+                    closerAhead={pendingHome !== null}
+                    onKeepGoing={() => setPendingHome(null)}
+                    onGoHomeAnyway={() => {
+                      if (pendingHome) walk.goHome(pendingHome);
+                      setPendingHome(null);
+                    }}
                     speed={routeSpeed}
                     weight={weight.weight}
                     startedAt={walk.startedAt}
@@ -324,6 +338,7 @@ export function MapView({ apiKey }: Props) {
                     }}
                     onStopWalk={() => {
                       setEndMenu(false);
+                      setPendingHome(null);
                       setHomewardStatus("idle");
                       setLastWalk(walk.stop());
                     }}
@@ -437,6 +452,9 @@ function RouteStatus({
   homeward,
   endMenu,
   homewardFailed,
+  closerAhead,
+  onKeepGoing,
+  onGoHomeAnyway,
   speed,
   weight,
   startedAt,
@@ -460,6 +478,10 @@ function RouteStatus({
   /** 「終了」を押して、終わり方の選択肢を出しているか（#93） */
   endMenu: boolean;
   homewardFailed: boolean;
+  /** 元のルートの残りのほうが近くて、このまま進むかを選んでもらっているか（#96） */
+  closerAhead: boolean;
+  onKeepGoing: () => void;
+  onGoHomeAnyway: () => void;
   speed: WalkSpeed;
   weight: number | null;
   startedAt: number | null;
@@ -526,7 +548,14 @@ function RouteStatus({
             </button>
           </div>
         )}
-        {endMenu ? (
+        {closerAhead ? (
+          <>
+            <WalkButton onClick={onKeepGoing}>このまま進む</WalkButton>
+            <WalkButton onClick={onGoHomeAnyway}>
+              それでも帰り道にする
+            </WalkButton>
+          </>
+        ) : endMenu ? (
           // 終わり方を選ぶ（#93）。帰っているときは「出発点まで帰る」を出さない
           <>
             <WalkButton onClick={onStopWalk}>ここで終わる</WalkButton>
