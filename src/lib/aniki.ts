@@ -25,7 +25,9 @@ export type AnikiScene =
   // 途中で切り上げて帰るとき（#93）。帰り道を探している・作れなかった・できた
   | "homewardSearching"
   | "homewardFailed"
-  | "homeward";
+  | "homeward"
+  // 帰り道より、元のルートの残りのほうが近いとき（#96）
+  | "closerAhead";
 
 /**
  * 場面ごとのセリフ。先頭は issue #41・#42 などで人間と決めたもの。
@@ -114,6 +116,7 @@ export const ANIKI_LINES: Record<AnikiScene, readonly string[]> = {
   homewardSearching: ["近道を探してくる。ちょっと待ってな"],
   homewardFailed: ["すまん、帰り道が見つからなかった。もう一回いいか？"],
   homeward: ["今日はここまでにしとくか。帰り道は任せな"],
+  closerAhead: ["このまま進んだほうが近いぞ"],
 };
 
 /**
@@ -155,6 +158,7 @@ const ANIKI_FACES: Record<AnikiScene, AnikiFace> = {
   homewardSearching: "normal",
   homewardFailed: "troubled",
   homeward: "smile",
+  closerAhead: "fired-up",
 };
 
 export function anikiFace(scene: AnikiScene): AnikiFace {

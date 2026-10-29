@@ -77,6 +77,10 @@ test("「出発点まで帰る」で帰り道になり、歩いた距離は通�
   await walkNorth(page, context);
   await page.getByRole("button", { name: "終了" }).click();
   await page.getByRole("button", { name: "出発点まで帰る" }).click();
+  // 帰り道（約 222m）は元のルートの残り（約 1.3km）より短いので、選ばせずにすぐ帰り道にする（#96）
+  await expect(page.getByRole("button", { name: "このまま進む" })).toHaveCount(
+    0,
+  );
 
   const progress = page.getByTestId("walk-progress");
   await expect(progress).toHaveText("歩いた 222 m / 帰り道の残り 222 m");
