@@ -6,6 +6,7 @@ import {
   anikiFaceSrc,
   anikiScene,
   EN_ROUTE_M,
+  homewardWalkTalk,
   pickLine,
   reversedWalkTalk,
   routeFit,
@@ -140,6 +141,10 @@ describe("ANIKI_LINES", () => {
         "いい道を見つけたぞ。ただ、ちょっと短めになっちまった",
         "ちょっと短めだが、軽く歩くにはちょうどいいぞ",
       ],
+      // 途中で切り上げて帰るとき（#93）
+      homewardSearching: ["近道を探してくる。ちょっと待ってな"],
+      homewardFailed: ["すまん、帰り道が見つからなかった。もう一回いいか？"],
+      homeward: ["今日はここまでにしとくか。帰り道は任せな"],
     });
   });
 });
@@ -443,5 +448,36 @@ describe("ルートの長さが目標とずれたとき（#72）", () => {
   it("表情は troubled", () => {
     expect(anikiFace("longer")).toBe("troubled");
     expect(anikiFace("shorter")).toBe("troubled");
+  });
+});
+
+describe("帰り道の一言（#93）", () => {
+  it("帰り道に入ると「今日はここまでにしとくか」と言い、表情は場面に合わせる", () => {
+    const talk = homewardWalkTalk(startWalkTalk());
+    expect(talk).toMatchObject({ scene: "homeward", id: 1, saidAt: 0 });
+    expect(anikiFace("homeward")).toBe("smile");
+    expect(anikiFace("homewardSearching")).toBe("normal");
+    expect(anikiFace("homewardFailed")).toBe("troubled");
+  });
+
+  it("帰り道では「半分」を言わず、帰り道の残り 300m で「あと少し」と言う", () => {
+    let talk = homewardWalkTalk(startWalkTalk());
+    const step = (walked: number) =>
+      (talk = nextWalkTalk(talk, { walked, total: 800, offRouteCount: 0 }));
+    expect(step(150).scene).toBe("homeward");
+    expect(step(400).scene).toBe("enRoute");
+    expect(step(520).scene).toBe("almost");
+  });
+
+  it("切り上げる前に「あと少し」を言っていても、帰り道でもう一度言える", () => {
+    let talk = nextWalkTalk(startWalkTalk(), {
+      walked: 1800,
+      total: 2000,
+      offRouteCount: 0,
+    });
+    expect(talk.scene).toBe("almost");
+    talk = homewardWalkTalk(talk);
+    talk = nextWalkTalk(talk, { walked: 600, total: 800, offRouteCount: 0 });
+    expect(talk.scene).toBe("almost");
   });
 });

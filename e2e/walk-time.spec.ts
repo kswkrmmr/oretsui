@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { moveDuringWalk, startWalk } from "./helpers";
+import { finishWalk, moveDuringWalk, startWalk } from "./helpers";
 
 const HERE = { latitude: 35.6895, longitude: 139.6917 };
 // 出発点から北へ約445m、東へ約452m、出発点へ戻る三角形（全長 約1.5km）
@@ -43,7 +43,7 @@ test("終了すると、今日の散歩のまとめが出る", async ({ page, co
     longitude: 139.6917,
   });
   await page.clock.runFor(120_000);
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(page.getByTestId("walk-summary")).toHaveText(
     "今日の散歩 2分・222 m",
   );

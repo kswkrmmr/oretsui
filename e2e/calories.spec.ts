@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { moveDuringWalk, startWalk } from "./helpers";
+import { finishWalk, moveDuringWalk, startWalk } from "./helpers";
 
 // 消費カロリー（#89）。体重を入れたときだけ、散歩中とまとめに出す
 const HERE = { latitude: 35.6895, longitude: 139.6917 };
@@ -56,7 +56,7 @@ test("体重を入れて散歩すると、散歩中とまとめに消費カロ�
   await moveDuringWalk(page, context, NORTH_222M);
   await expect(calories).toHaveText("約 10 kcal");
   await page.clock.runFor(120_000);
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(page.getByTestId("walk-summary")).toHaveText(
     "今日の散歩 2分・222 m・約 10 kcal",
   );
@@ -72,7 +72,7 @@ test("体重を入れていないと、消費カロリーは出ない", async ({
   await moveDuringWalk(page, context, NORTH_222M);
   await expect(page.getByTestId("walk-calories")).toHaveCount(0);
   await page.clock.runFor(120_000);
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(page.getByTestId("walk-summary")).toHaveText(
     "今日の散歩 2分・222 m",
   );

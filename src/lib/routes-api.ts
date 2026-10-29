@@ -32,11 +32,31 @@ const waypoint = ({ lat, lng }: LatLng) => ({
  * 出発点から経由地を回って出発点に戻る、徒歩ルートを取得する。
  * サーバー側からだけ呼ぶ（API キーをブラウザに出さない）
  */
-export async function computeWalkingRoute(
+export function computeWalkingRoute(
   apiKey: string,
   start: LatLng,
   waypoints: LatLng[],
   fetchImpl: typeof fetch = fetch,
+): Promise<RouteResult | null> {
+  return computeRoute(apiKey, start, start, waypoints, fetchImpl);
+}
+
+/** from から to までの、片道の徒歩ルートを取得する（帰り道。#93）。サーバー側からだけ呼ぶ */
+export function computeWalkingRouteTo(
+  apiKey: string,
+  from: LatLng,
+  to: LatLng,
+  fetchImpl: typeof fetch = fetch,
+): Promise<RouteResult | null> {
+  return computeRoute(apiKey, from, to, [], fetchImpl);
+}
+
+async function computeRoute(
+  apiKey: string,
+  origin: LatLng,
+  destination: LatLng,
+  waypoints: LatLng[],
+  fetchImpl: typeof fetch,
 ): Promise<RouteResult | null> {
   const response = await fetchImpl(ROUTES_API_URL, {
     method: "POST",
@@ -46,8 +66,8 @@ export async function computeWalkingRoute(
       "X-Goog-FieldMask": FIELD_MASK,
     },
     body: JSON.stringify({
-      origin: waypoint(start),
-      destination: waypoint(start),
+      origin: waypoint(origin),
+      destination: waypoint(destination),
       intermediates: waypoints.map(waypoint),
       travelMode: "WALK",
     }),

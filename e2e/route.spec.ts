@@ -1,4 +1,4 @@
-import { moveDuringWalk, startWalk } from "./helpers";
+import { finishWalk, moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 // @vis.gl/react-google-maps も内側の div に data-testid="map" を付けるため、
@@ -169,7 +169,7 @@ test("「出発」を押すと、位置を動かすたびに歩いた距離と�
   });
   await expect(progress).toHaveText("歩いた 445 m / 残り 1.1 km");
 
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(progress).toHaveCount(0);
   await expect(page.getByRole("button", { name: "別のルート" })).toBeVisible();
 });

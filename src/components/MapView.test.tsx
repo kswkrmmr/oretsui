@@ -154,6 +154,12 @@ async function generateRoute() {
 }
 const NOTICE = "位置情報が使えません。地図をタップして出発点を選んでください";
 
+/** 散歩を終える。「終了」で終わり方の選択肢が出るので、「ここで終わる」を選ぶ（#93） */
+function finishWalk() {
+  fireEvent.click(screen.getByRole("button", { name: "終了" }));
+  fireEvent.click(screen.getByRole("button", { name: "ここで終わる" }));
+}
+
 // 兄貴のセリフは候補から乱数で選ぶ（#92）。テストでは先頭（今までのセリフ）が選ばれるよう固定する
 beforeEach(() => {
   vi.spyOn(Math, "random").mockReturnValue(0);
@@ -758,7 +764,7 @@ describe("MapView", () => {
       it("終了すると地図の向きを 0° に戻し、ボタンを消す", async () => {
         await startWalkWithCompass();
         compass(90);
-        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        finishWalk();
         expect(setHeading()).toHaveBeenLastCalledWith(0);
         expect(
           screen.queryByRole("button", { name: "北を上にする" }),
@@ -803,7 +809,7 @@ describe("MapView", () => {
         // 北へ約 222m
         move({ lat: HERE.lat + 0.002, lng: HERE.lng });
         tick(120_000);
-        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        finishWalk();
         expect(screen.getByTestId("walk-summary")).toHaveTextContent(
           "今日の散歩 2分・222 m",
         );
@@ -818,7 +824,7 @@ describe("MapView", () => {
         async (button) => {
           await startWalk();
           tick(60_000);
-          fireEvent.click(screen.getByRole("button", { name: "終了" }));
+          finishWalk();
           expect(screen.getByTestId("walk-summary")).toBeInTheDocument();
           fireEvent.click(screen.getByRole("button", { name: button }));
           expect(screen.queryByTestId("walk-summary")).toBeNull();
@@ -857,7 +863,7 @@ describe("MapView", () => {
         expect(container()).not.toHaveAttribute("data-walk-updates");
         fireEvent.click(screen.getByRole("button", { name: "出発" }));
         expect(container()).toHaveAttribute("data-walk-updates", "0");
-        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        finishWalk();
         expect(container()).not.toHaveAttribute("data-walk-updates");
       });
     });
@@ -1000,7 +1006,7 @@ describe("MapView", () => {
 
     it("「終了」を押すと追いかけるのをやめ、ルートを作った直後の画面に戻る", async () => {
       await startWalk();
-      fireEvent.click(screen.getByRole("button", { name: "終了" }));
+      finishWalk();
       expect(geo.clearWatch).toHaveBeenCalledWith(7);
       expect(screen.queryByTestId("walk-progress")).toBeNull();
       expect(screen.getByTestId("route-summary")).toBeInTheDocument();
@@ -1097,8 +1103,9 @@ describe("MapView", () => {
       await act(async () => {});
       expect(request).toHaveBeenCalledWith("screen");
 
+      fireEvent.click(screen.getByRole("button", { name: "終了" }));
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "終了" }));
+        fireEvent.click(screen.getByRole("button", { name: "ここで終わる" }));
       });
       expect(release).toHaveBeenCalledTimes(1);
     });

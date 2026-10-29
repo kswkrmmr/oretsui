@@ -31,3 +31,9 @@ export async function moveDuringWalk(
     String(before + 1),
   );
 }
+
+/** 散歩を終える。「終了」で終わり方の選択肢が出るので、「ここで終わる」を選ぶ（#93） */
+export async function finishWalk(page: Page) {
+  await page.getByRole("button", { name: "終了" }).click();
+  await page.getByRole("button", { name: "ここで終わる" }).click();
+}

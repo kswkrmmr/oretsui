@@ -1,4 +1,4 @@
-import { moveDuringWalk, startWalk } from "./helpers";
+import { finishWalk, moveDuringWalk, startWalk } from "./helpers";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 // 外側（DOM 上で先に出てくる）コンテナを明示的に指定する
@@ -220,7 +220,7 @@ test("散歩中、出発 → 道中 → 半分 → 道中 → 残り 300m → �
   await moveTo(35.69127, 139.69392);
   await expect(line).toHaveText("そうそう、その調子！");
 
-  await page.getByRole("button", { name: "終了" }).click();
+  await finishWalk(page);
   await expect(line).toHaveText("おつかれ！いい散歩だったな");
   // 次の操作で入れ替わる
   await page.getByRole("button", { name: "条件を変える" }).click();
