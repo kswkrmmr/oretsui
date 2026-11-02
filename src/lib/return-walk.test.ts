@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextReturnWalk, startReturnWalk } from "./return-walk";
+import { closerAhead, nextReturnWalk, startReturnWalk } from "./return-walk";
 
 // 東へ約 270m、そこから北へ約 220m で出発点に着く帰り道
 const HOME_PATH = [
@@ -48,5 +48,16 @@ describe("帰り道の進み具合（#93）", () => {
       ({ walk } = nextReturnWalk(walk, { lat: 35.6895, lng }, 5, 0));
     expect(walk.walked).toBe(walked);
     expect(walk.path).toBe(HOME_PATH);
+  });
+});
+
+describe("元のルートの残りのほうが近いか（#96）", () => {
+  it("元のルートの残りが帰り道より短ければ、このまま進んだほうが近い", () => {
+    expect(closerAhead(200, 500)).toBe(true);
+  });
+
+  it("元のルートの残りのほうが長い・同じなら、帰り道にする", () => {
+    expect(closerAhead(800, 500)).toBe(false);
+    expect(closerAhead(500, 500)).toBe(false);
   });
 });
